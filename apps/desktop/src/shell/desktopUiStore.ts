@@ -21,7 +21,9 @@ import type { ResourceStat } from "../lib/resourceStat";
 import {
   authorityBadgeForMode,
   type ResourceTreeAuthorityBadge,
+  type ResourceTreeSyncBadge,
 } from "../lib/resourceTreeBadges";
+import type { WorkspaceCloudSyncSnapshot } from "../lib/cloudSync";
 
 /**
  * Opaque id for a mounted resource renderer session.
@@ -57,6 +59,8 @@ export function rendererSessionIdForPath(path: string): RendererSessionId {
 export type DesktopUiState = {
   saveStatusBySessionId: Record<string, SaveState>;
   authorityBadgeByPath: Record<string, ResourceTreeAuthorityBadge>;
+  syncBadgeByPath: Record<string, ResourceTreeSyncBadge>;
+  workspaceCloudSync: WorkspaceCloudSyncSnapshot;
   sidebarWidth: number;
   inspectorOpen: boolean;
   agentPanelOpen: boolean;
@@ -75,6 +79,13 @@ export type DesktopUiState = {
   remapSaveStatus: (fromSessionId: RendererSessionId, toSessionId: RendererSessionId) => void;
   recordAuthorityStat: (stat: ResourceStat) => void;
   clearAuthorityBadges: () => void;
+  setSyncBadges: (badges: Record<string, ResourceTreeSyncBadge>) => void;
+  clearSyncBadges: () => void;
+  setWorkspaceCloudSync: (
+    snapshot:
+      | WorkspaceCloudSyncSnapshot
+      | ((prev: WorkspaceCloudSyncSnapshot) => WorkspaceCloudSyncSnapshot),
+  ) => void;
   setSidebarWidth: (width: number) => void;
   setInspectorOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setAgentPanelOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
@@ -116,6 +127,15 @@ export function createDesktopUiStore(
   return createStore<DesktopUiState>((set, get) => ({
     saveStatusBySessionId: {},
     authorityBadgeByPath: {},
+    syncBadgeByPath: {},
+    workspaceCloudSync: {
+      phase: "idle",
+      message: null,
+      lastSyncedAt: null,
+      conflictCount: 0,
+      errorCount: 0,
+      cloudWorkspaceId: null,
+    },
     sidebarWidth: initial?.sidebarWidth ?? 272,
     inspectorOpen: false,
     agentPanelOpen: false,
@@ -160,6 +180,18 @@ export function createDesktopUiStore(
       if (Object.keys(get().authorityBadgeByPath).length === 0) return;
       set({ authorityBadgeByPath: {} });
     },
+    setSyncBadges: (badges) => {
+      set({ syncBadgeByPath: badges });
+    },
+    clearSyncBadges: () => {
+      if (Object.keys(get().syncBadgeByPath).length === 0) return;
+      set({ syncBadgeByPath: {} });
+    },
+    setWorkspaceCloudSync: (snapshot) =>
+      set({
+        workspaceCloudSync:
+          typeof snapshot === "function" ? snapshot(get().workspaceCloudSync) : snapshot,
+      }),
     remapSaveStatus: (fromSessionId, toSessionId) => {
       if (fromSessionId === toSessionId) return;
       const current = get().saveStatusBySessionId;

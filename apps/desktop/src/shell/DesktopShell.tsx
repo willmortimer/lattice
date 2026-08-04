@@ -58,6 +58,7 @@ import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
 import { useDesktopUiStore } from "./desktopUiStore";
 import "./agentFocus.css";
 import { useResourceTreeBadgeHints } from "./useResourceTreeBadgeHints";
+import { useCloudSyncLoop } from "./useCloudSyncLoop";
 import { ResourceTree } from "../ResourceTree";
 import { KindMark } from "../KindMark";
 import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
@@ -162,6 +163,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     agentPanelOpen,
     selected?.path,
   );
+  useCloudSyncLoop(inBrowser || !snapshot ? null : snapshot.root, catalog);
 
   useEffect(() => {
     void emitProductTelemetry("app_launch");

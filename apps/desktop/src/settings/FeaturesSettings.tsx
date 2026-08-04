@@ -12,6 +12,8 @@ import {
   putEncryptedWorkspaceBackup,
   type EncryptedBackupPutResult,
 } from "../lib/encryptedBackup";
+import { triggerWorkspaceCloudSync } from "../lib/cloudSync";
+import { useDesktopUiStore } from "../shell/desktopUiStore";
 import {
   downloadPack,
   getPack,
@@ -108,6 +110,8 @@ export function FeaturesSettings({
   const [encBackupBusy, setEncBackupBusy] = useState(false);
   const [encBackupError, setEncBackupError] = useState<string | null>(null);
   const [encBackupResult, setEncBackupResult] = useState<EncryptedBackupPutResult | null>(null);
+  const [cloudSyncBusy, setCloudSyncBusy] = useState(false);
+  const workspaceCloudSync = useDesktopUiStore((state) => state.workspaceCloudSync);
 
   const displayError = error ?? queryErrorMessage(semanticQueryError);
 
@@ -231,6 +235,19 @@ export function FeaturesSettings({
       }
     } finally {
       setLabsBusy(false);
+    }
+  }
+
+  async function handleCloudSyncNow() {
+    if (inBrowser || cloudSyncBusy) return;
+    if (!workspaceRoot) {
+      return;
+    }
+    setCloudSyncBusy(true);
+    try {
+      await triggerWorkspaceCloudSync();
+    } finally {
+      setCloudSyncBusy(false);
     }
   }
 
@@ -383,6 +400,45 @@ export function FeaturesSettings({
             <div className="diagnostics-card" role="alert">
               <strong>Encrypted backup error</strong>
               <span>{encBackupError}</span>
+            </div>
+          ) : null}
+
+          <SettingRow
+            settingId="features.labs-cloud-sync"
+            title="Labs open-format cloud sync"
+            description="Debounced push/pull sync after saves and when cloud reconnects. Conflicted resources are skipped instead of overwritten."
+          >
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={cloudSyncBusy || workspaceCloudSync.phase === "syncing"}
+              onClick={() => void handleCloudSyncNow()}
+            >
+              {cloudSyncBusy || workspaceCloudSync.phase === "syncing"
+                ? "Syncing…"
+                : "Sync workspace now"}
+            </Button>
+          </SettingRow>
+          {workspaceCloudSync.message ? (
+            <div
+              className="diagnostics-card"
+              role={workspaceCloudSync.phase === "error" || workspaceCloudSync.phase === "conflict" ? "alert" : "status"}
+            >
+              <strong>
+                {workspaceCloudSync.phase === "syncing"
+                  ? "Cloud sync in progress"
+                  : workspaceCloudSync.phase === "conflict"
+                    ? "Cloud sync conflict"
+                    : workspaceCloudSync.phase === "error"
+                      ? "Cloud sync error"
+                      : "Cloud sync status"}
+              </strong>
+              <span>
+                {workspaceCloudSync.message}
+                {workspaceCloudSync.lastSyncedAt
+                  ? ` · Last run ${new Date(workspaceCloudSync.lastSyncedAt).toLocaleString()}`
+                  : ""}
+              </span>
             </div>
           ) : null}
 
