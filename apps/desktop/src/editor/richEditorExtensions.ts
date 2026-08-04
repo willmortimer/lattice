@@ -1,7 +1,11 @@
 import type { Extensions } from "@tiptap/core";
 import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import { ReactNodeViewRenderer } from "@tiptap/react";
+import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
+
+import { collabCaretUser } from "./collab/awarenessUser";
 
 import { AgentAnchorHighlight } from "../agent/adapters/AgentAnchorHighlight";
 import { BlockDragHandle } from "./BlockDragHandle";
@@ -54,11 +58,16 @@ export const liveEditorExtensions: Extensions = [
 ];
 
 /** Collaborative live editor bound to a shared Y.Doc (undo handled by Yjs). */
-export function collabLiveEditorExtensions(ydoc: Y.Doc): Extensions {
+export function collabLiveEditorExtensions(ydoc: Y.Doc, awareness: Awareness): Extensions {
+  const provider = { awareness };
   return [
     ...mapRichEditorExtensions(false),
     Collaboration.configure({
       document: ydoc,
+    }),
+    CollaborationCaret.configure({
+      provider,
+      user: collabCaretUser(awareness.clientID),
     }),
     BlockDragHandle,
     DictationProvisional,
