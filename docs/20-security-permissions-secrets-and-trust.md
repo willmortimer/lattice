@@ -216,9 +216,10 @@ Optional **workspace encryption** (DEK wrapping, biometric-gated key access) rem
 
 ## App lock (session privacy)
 
-The desktop shell may enable **app lock** (Settings → Privacy) on macOS:
+The desktop shell may enable **app lock** (Settings → Privacy) on macOS and Windows:
 
-- Touch ID or device password unlocks the session via LocalAuthentication in Rust.
+- macOS: Touch ID or device password via LocalAuthentication in Rust.
+- Windows: Windows Hello / device PIN via `UserConsentVerifier` with the main window HWND (`IUserConsentVerifierInterop`) so the consent UI does not freeze the webview.
 - While locked, the UI shows a privacy overlay and privileged Tauri IPC returns `app-locked`.
 - Files on disk stay ordinary workspace content; app lock is not at-rest encryption.
 - The same `request_user_presence` helper is the intended hook for future privileged-action approvals.

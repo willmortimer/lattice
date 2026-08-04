@@ -49,7 +49,9 @@ Keychain ACLs on credential items (future SecItem work).
 - Secret handling for presence stays in Rust; no community biometric Tauri
   plugin enters the trust path.
 - macOS production builds need proper code signing for reliable LocalAuthentication.
-- Other platforms show app lock as unavailable until an equivalent presence
-  backend exists.
+- Windows builds use `IUserConsentVerifierInterop` with the main window HWND so
+  Hello/PIN consent does not freeze the Win32 webview host.
+- Linux and other platforms show app lock as unavailable until an equivalent
+  presence backend exists.
 - Future privileged approvals should call `request_user_presence` with a
   distinct reason string rather than inventing a second biometric path.

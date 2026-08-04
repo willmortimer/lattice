@@ -66,7 +66,18 @@ impl std::error::Error for PresenceError {}
 
 /// Prompt for device owner authentication (Touch ID / Windows Hello with PIN fallback).
 pub fn request_user_presence(reason: PresenceReason) -> Result<(), PresenceError> {
-    request_user_presence_with_reason(reason.as_localized())
+    request_user_presence_with_reason(reason.as_localized(), None)
+}
+
+/// Prompt for presence, associating the Windows Hello UI with an owner HWND when provided.
+///
+/// On Win32 hosts, Hello must be requested via `IUserConsentVerifierInterop` with the
+/// app window handle; otherwise the consent UI can freeze the webview.
+pub fn request_user_presence_for_window(
+    reason: PresenceReason,
+    window_hwnd: Option<isize>,
+) -> Result<(), PresenceError> {
+    request_user_presence_with_reason(reason.as_localized(), window_hwnd)
 }
 
 /// Require presence for a privileged mutation (approve / apply).
@@ -90,18 +101,22 @@ pub fn require_approval_presence(reason: PresenceReason) -> Result<(), String> {
     }
 }
 
-pub fn request_user_presence_with_reason(reason: &str) -> Result<(), PresenceError> {
+pub fn request_user_presence_with_reason(
+    reason: &str,
+    window_hwnd: Option<isize>,
+) -> Result<(), PresenceError> {
     #[cfg(target_os = "macos")]
     {
+        let _ = window_hwnd;
         macos::evaluate(reason)
     }
     #[cfg(target_os = "windows")]
     {
-        windows_hello::evaluate(reason)
+        windows_hello::evaluate(reason, window_hwnd)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        let _ = reason;
+        let _ = (reason, window_hwnd);
         Err(PresenceError::Unsupported)
     }
 }
@@ -224,8 +239,17 @@ mod macos {
 
 #[cfg(target_os = "windows")]
 mod windows_hello {
-    use windows::core::HSTRING;
-    use windows::Security::Credentials::UI::UserConsentVerifier;
+    use std::sync::mpsc;
+    use std::thread;
+
+    use windows::core::{factory, HSTRING};
+    use windows::Foundation::IAsyncOperation;
+    use windows::Security::Credentials::UI::{
+        UserConsentVerificationResult, UserConsentVerifier,
+    };
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::WinRT::IUserConsentVerifierInterop;
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
 
     use super::{
         map_user_consent_availability, map_user_consent_verification_result, PresenceError,
@@ -238,7 +262,7 @@ mod windows_hello {
         }
     }
 
-    pub(super) fn evaluate(reason: &str) -> Result<(), PresenceError> {
+    pub(super) fn evaluate(reason: &str, window_hwnd: Option<isize>) -> Result<(), PresenceError> {
         if reason.trim().is_empty() {
             return Err(PresenceError::Failed);
         }
@@ -249,12 +273,48 @@ mod windows_hello {
             Err(_) => return Err(PresenceError::NotAvailable),
         }
 
-        // Prefer RequestVerificationAsync (ADR 0049 / H1). For Win32 hosts this
-        // still routes through Windows Hello / device PIN when configured.
-        let operation = UserConsentVerifier::RequestVerificationAsync(&HSTRING::from(reason))
+        let reason = reason.to_string();
+        // WinRT `.get()` pumps COM on the calling thread. Running it on a worker
+        // keeps Tauri's async/UI path responsive while Hello is showing.
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = tx.send(evaluate_blocking(&reason, window_hwnd));
+        });
+        rx.recv().unwrap_or(Err(PresenceError::Failed))
+    }
+
+    fn evaluate_blocking(reason: &str, window_hwnd: Option<isize>) -> Result<(), PresenceError> {
+        let window = resolve_owner_hwnd(window_hwnd);
+        focus_owner_window(window);
+
+        let interop = factory::<UserConsentVerifier, IUserConsentVerifierInterop>()
             .map_err(|_| PresenceError::Failed)?;
+        let operation: IAsyncOperation<UserConsentVerificationResult> = unsafe {
+            interop
+                .RequestVerificationForWindowAsync(window, &HSTRING::from(reason))
+                .map_err(|_| PresenceError::Failed)?
+        };
         let result = operation.get().map_err(|_| PresenceError::Failed)?;
         map_user_consent_verification_result(result.0)
+    }
+
+    fn resolve_owner_hwnd(window_hwnd: Option<isize>) -> HWND {
+        if let Some(raw) = window_hwnd {
+            if raw != 0 {
+                return HWND(raw as *mut _);
+            }
+        }
+        // Foreground as last resort for approval paths without an AppHandle.
+        unsafe { GetForegroundWindow() }
+    }
+
+    fn focus_owner_window(window: HWND) {
+        if window.0.is_null() {
+            return;
+        }
+        unsafe {
+            let _ = SetForegroundWindow(window);
+        }
     }
 
     fn check_availability(
