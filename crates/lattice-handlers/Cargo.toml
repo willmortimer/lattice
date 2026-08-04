@@ -16,6 +16,7 @@ lattice-runtime.workspace = true
 lattice-embedding.workspace = true
 lattice-connectors.workspace = true
 lattice-cloud-client.workspace = true
+lattice-workspace-crypto.workspace = true
 latticefs-core.workspace = true
 lattice-capture-core.workspace = true
 serde.workspace = true
@@ -28,6 +29,10 @@ hex.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "webp"] }
 tempfile = "3"
 serde_json.workspace = true
+
+[features]
+default = []
+keychain = ["lattice-workspace-crypto/keychain"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 lattice-apple-signin-macos = { workspace = true }

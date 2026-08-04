@@ -23,6 +23,8 @@ mod path;
 mod quick_note;
 mod search;
 mod workspace;
+mod workspace_backup;
+mod workspace_crypto;
 
 pub use authoritative::{read_authoritative_bytes, read_authoritative_string};
 pub use capture::{
@@ -79,4 +81,12 @@ pub use workspace::{
     list_resources, list_resources_with_runtime, list_resources_with_session, open_workspace,
     open_workspace_with_runtime, open_workspace_with_session, snapshot_from_workspace,
     WorkspaceSnapshot,
+};
+pub use workspace_backup::{
+    put_encrypted_workspace_backup, put_encrypted_workspace_backup_with_client,
+    EncryptedBackupPutResult,
+};
+pub use workspace_crypto::{
+    workspace_crypto_lock, workspace_crypto_status, workspace_crypto_unlock,
+    WorkspaceCryptoStatus,
 };

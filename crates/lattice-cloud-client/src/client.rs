@@ -5,7 +5,12 @@ use latticefs_core::{ContentHash, ResourceId};
 
 use crate::config::cloud_url;
 use crate::error::{CloudError, Result};
-use crate::types::{AuthTokenResponse, MeResponse, PreferencesView};
+use crate::types::{
+    AuthTokenResponse, BackupMetadataResponse, CloudWorkspaceRecord, MeResponse, PreferencesView,
+};
+
+pub const CONTENT_HASH_HEADER: &str = "x-lattice-content-hash";
+pub const DEVICE_ID_HEADER: &str = "x-lattice-device-id";
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct BlobPutResponse {
@@ -301,6 +306,69 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
             return parse_blob_put_response(&response.body, hash_hex);
         }
         Err(bytes_api_error(response))
+    }
+
+    pub fn create_workspace(
+        &self,
+        bearer: &str,
+        name: &str,
+        local_workspace_id: Option<&str>,
+    ) -> Result<CloudWorkspaceRecord> {
+        let body = serde_json::json!({
+            "name": name,
+            "local_workspace_id": local_workspace_id,
+        });
+        self.post_json("/v1/workspaces", Some(&body), Some(bearer))
+    }
+
+    pub fn list_workspaces(&self, bearer: &str) -> Result<Vec<CloudWorkspaceRecord>> {
+        self.get_json("/v1/workspaces", Some(bearer))
+    }
+
+    /// Store opaque client-encrypted backup ciphertext for an owned workspace.
+    pub fn put_workspace_backup(
+        &self,
+        bearer: &str,
+        workspace_id: &str,
+        ciphertext: &[u8],
+        device_id: Option<&str>,
+    ) -> Result<BackupMetadataResponse> {
+        let hash = ContentHash::from_bytes(ciphertext)
+            .map_err(|err| CloudError::Http(err.to_string()))?;
+        let hash_hex = content_hash_hex(&hash);
+        let path = format!("/v1/workspaces/{workspace_id}/backups");
+        let mut headers = vec![
+            ("Content-Type", "application/octet-stream"),
+            (CONTENT_HASH_HEADER, hash_hex),
+        ];
+        let device_header;
+        if let Some(device_id) = device_id.map(str::trim).filter(|id| !id.is_empty()) {
+            device_header = device_id.to_string();
+            headers.push((DEVICE_ID_HEADER, device_header.as_str()));
+        }
+        let response = self.http.request_bytes(
+            &self.base_url,
+            "PUT",
+            &path,
+            Some(ciphertext),
+            Some(bearer),
+            &headers,
+        )?;
+        if response.status == 201 {
+            return decode_json(response.status, std::str::from_utf8(&response.body).map_err(
+                |err| CloudError::InvalidResponse(err.to_string()),
+            )?);
+        }
+        Err(bytes_api_error(response))
+    }
+
+    pub fn list_workspace_backups(
+        &self,
+        bearer: &str,
+        workspace_id: &str,
+    ) -> Result<Vec<BackupMetadataResponse>> {
+        let path = format!("/v1/workspaces/{workspace_id}/backups");
+        self.get_json(&path, Some(bearer))
     }
 
     pub fn get_blob(&self, bearer: &str, resource_id: ResourceId) -> Result<Vec<u8>> {
@@ -713,5 +781,32 @@ mod tests {
         assert!(matches!(err, CloudError::InvalidResponse(_)));
         assert!(err.to_string().contains("hash mismatch"));
         assert!(err.to_string().contains(hash_hex));
+    }
+
+    #[test]
+    fn put_workspace_backup_accepts_201_created() {
+        let http = FakeCloudHttp::default();
+        let workspace_id = "cloud-ws-1";
+        let data = b"opaque-client-ciphertext";
+        let hash = ContentHash::from_bytes(data).unwrap();
+        let hash_hex = content_hash_hex(&hash);
+        http.bytes_responses.lock().unwrap().insert(
+            format!("PUT /v1/workspaces/{workspace_id}/backups"),
+            CloudHttpBytesResponse {
+                status: 201,
+                body: format!(
+                    r#"{{"id":"bk-1","workspace_id":"{workspace_id}","device_id":null,"object_key":"backups/{workspace_id}/bk-1","size":{},"content_hash":"{hash_hex}","created_at":1}}"#,
+                    data.len()
+                )
+                .into_bytes(),
+                content_hash: None,
+            },
+        );
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let metadata = client
+            .put_workspace_backup("good-token", workspace_id, data, None)
+            .unwrap();
+        assert_eq!(metadata.content_hash, hash_hex);
+        assert_eq!(metadata.size, data.len() as i64);
     }
 }

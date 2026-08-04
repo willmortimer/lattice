@@ -10,12 +10,14 @@
 //! crate to `presence.rs`, `app_lock.rs`, or capture/**.
 
 mod aead;
+mod backup_payload;
 mod dek;
 mod error;
 mod keystore;
 mod session;
 
 pub use aead::{decrypt_blob, encrypt_blob, NONCE_LEN};
+pub use backup_payload::build_workspace_backup_payload;
 pub use dek::{generate_dek, Dek, DEK_LEN};
 pub use error::{Error, Result};
 pub use keystore::{dek_account_for, Keystore, MemoryKeystore, WORKSPACE_DEK_SERVICE};

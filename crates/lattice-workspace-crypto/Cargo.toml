@@ -22,3 +22,7 @@ keyring = { version = "3", optional = true, features = [
     "windows-native",
     "linux-native",
 ] }
+
+[dev-dependencies]
+lattice-core.workspace = true
+tempfile = "3"

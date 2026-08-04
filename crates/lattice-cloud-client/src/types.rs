@@ -77,6 +77,28 @@ pub struct CloudSessionStatus {
     pub error: Option<String>,
 }
 
+/// Cloud workspace registry row (`POST/GET /v1/workspaces`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct CloudWorkspaceRecord {
+    pub id: String,
+    pub owner_user_id: String,
+    pub name: String,
+    pub local_workspace_id: Option<String>,
+    pub created_at: i64,
+}
+
+/// Opaque backup metadata returned by `PUT/GET /v1/workspaces/{id}/backups`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct BackupMetadataResponse {
+    pub id: String,
+    pub workspace_id: String,
+    pub device_id: Option<String>,
+    pub object_key: String,
+    pub size: i64,
+    pub content_hash: String,
+    pub created_at: i64,
+}
+
 impl CloudSessionStatus {
     pub fn signed_out(cloud_url: String) -> Self {
         Self {

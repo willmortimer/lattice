@@ -389,6 +389,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
     keywords: ["labs", "cloud", "blob", "materialize", "authority"],
   },
   {
+    id: "features.labs-encrypted-backup",
+    section: "features",
+    title: "Labs encrypted workspace backup",
+    description: "Encrypt a workspace snapshot with the DEK and PUT opaque bytes to cloud backup storage.",
+    keywords: ["labs", "cloud", "backup", "encrypt", "dek", "ciphertext"],
+  },
+  {
     id: "features.labs-collaborative-page",
     section: "features",
     title: "Labs collaborative page editor",
