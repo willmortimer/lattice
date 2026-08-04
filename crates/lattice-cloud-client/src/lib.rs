@@ -11,7 +11,7 @@ mod types;
 pub use blob::HttpCloudBlobClient;
 pub use client::{
     BlobPutResponse, CloudApiClient, CloudHttpBytesResponse, CloudHttpClient, CloudHttpResponse,
-    DefaultCloudApiClient, HttpCloudClient, default_client,
+    DefaultCloudApiClient, HttpCloudClient, IF_MATCH_HEADER, WORKSPACE_ID_HEADER, default_client,
 };
 pub use config::{
     CLOUD_TOKEN_ENV, DEFAULT_CLOUD_URL, cloud_ai_responses_base_url, cloud_token_from_env,
@@ -29,5 +29,5 @@ pub use session::{
 };
 pub use types::{
     AiAccess, AuthTokenResponse, BackupMetadataResponse, CloudSessionStatus, CloudUser,
-    CloudWorkspaceRecord, EntitlementsView, MeResponse, PreferencesView,
+    CloudWorkspaceRecord, EntitlementsView, MeResponse, PreferencesView, WorkspaceSyncHead,
 };

@@ -2,8 +2,8 @@
 //!
 //! # Boundary
 //!
-//! - No network I/O, no HTTP client, no storage backends.
-//! - Inputs are already-fetched snapshots; callers own transport (S2 sync-heads).
+//! - Planner (`plan`) has no network I/O.
+//! - [`executor`] applies planner output via `lattice-cloud-client`.
 //! - Capture, presence, and app lock (desktop) are **out of scope**. Do not
 //!   couple this crate to `capture/**`, `presence.rs`, or `app_lock.rs`.
 //!
@@ -17,6 +17,15 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+
+mod executor;
+mod sync_state;
+
+pub use executor::{
+    execute_plan_entry, local_snapshot_from_workspace, run_workspace_sync, ExecuteOutcome,
+    ExecuteResult, ExecutorError, SyncRunReport,
+};
+pub use sync_state::{SyncState, SyncStateError, SYNC_STATE_FILENAME};
 
 /// Per-resource sync classification produced by [`plan`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
