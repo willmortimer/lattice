@@ -11,7 +11,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use crate::presence::{
-    presence_available, request_user_presence, PresenceError, PresenceReason,
+    presence_available, request_user_presence_for_window, PresenceError, PresenceReason,
 };
 
 pub const APP_LOCK_EVENT: &str = "lattice-app-lock";
@@ -141,7 +141,7 @@ impl AppLockState {
         true
     }
 
-    pub fn unlock_with_presence(&self) -> Result<(), PresenceError> {
+    pub fn unlock_with_presence(&self, window_hwnd: Option<isize>) -> Result<(), PresenceError> {
         let enabled = {
             let guard = self
                 .inner
@@ -156,7 +156,7 @@ impl AppLockState {
             true
         };
         debug_assert!(enabled);
-        request_user_presence(PresenceReason::UnlockApp)?;
+        request_user_presence_for_window(PresenceReason::UnlockApp, window_hwnd)?;
         let mut guard = self
             .inner
             .lock()
@@ -214,6 +214,20 @@ impl AppLockState {
 
 fn clamp_idle_minutes(value: u32) -> u32 {
     value.clamp(MIN_IDLE_LOCK_MINUTES, MAX_IDLE_LOCK_MINUTES)
+}
+
+fn main_window_hwnd(app: &AppHandle) -> Option<isize> {
+    #[cfg(target_os = "windows")]
+    {
+        let window = app.get_webview_window("main")?;
+        let hwnd = window.hwnd().ok()?;
+        Some(hwnd.0 as isize)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        None
+    }
 }
 
 pub fn ensure_unlocked(state: &AppLockState) -> Result<(), String> {
@@ -333,7 +347,7 @@ pub fn app_lock_unlock(
     state: State<'_, AppLockState>,
 ) -> Result<AppLockStatus, String> {
     state
-        .unlock_with_presence()
+        .unlock_with_presence(main_window_hwnd(&app))
         .map_err(|err| format!("{}: {err}", err.code()))?;
     let status = state.status();
     emit_status(&app, &status);
@@ -353,7 +367,7 @@ pub fn app_lock_enable(
     if !presence_available() {
         return Err(PresenceError::NotAvailable.to_string());
     }
-    request_user_presence(PresenceReason::EnableAppLock)
+    request_user_presence_for_window(PresenceReason::EnableAppLock, main_window_hwnd(&app))
         .map_err(|err| format!("{}: {err}", err.code()))?;
     let minutes = clamp_idle_minutes(
         idle_lock_minutes.unwrap_or_else(|| state.status().idle_lock_minutes),
