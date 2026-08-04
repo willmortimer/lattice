@@ -14,10 +14,10 @@ use lattice_core::{WorkspaceEvent, WorkspaceWatcher};
 use lattice_index::WorkspaceIndex;
 use lattice_runtime::apply_workspace_event_to_index;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 const WORKSPACE_CHANGED_EVENT: &str = "workspace-changed";
-const CATALOG_DELTA_EVENT: &str = "catalog-delta";
+pub const CATALOG_DELTA_EVENT: &str = "catalog-delta";
 
 /// Tauri-managed slot for the watcher of the currently open workspace. Only
 /// one workspace is open at a time in v0, so this holds at most one entry;
@@ -90,17 +90,21 @@ fn path_string(path: &Path) -> String {
 /// rather than surfacing an error to the caller.
 #[tauri::command]
 pub fn start_watching(root: String, app: AppHandle, state: tauri::State<WatcherState>) {
-    start(app, &state, PathBuf::from(root));
+    start(&app, &state, PathBuf::from(root));
 }
 
 /// Stop the active watcher, if any.
 #[tauri::command]
-pub fn stop_watching(state: tauri::State<WatcherState>) {
-    stop(&state);
+pub fn stop_watching(app: AppHandle, state: tauri::State<WatcherState>) {
+    stop(&app, &state);
 }
 
-fn start(app: AppHandle, state: &WatcherState, root: PathBuf) {
-    stop(state);
+fn start(app: &AppHandle, state: &WatcherState, root: PathBuf) {
+    stop(app, state);
+
+    if let Some(workflow_state) = app.try_state::<crate::workflow::WorkflowState>() {
+        crate::workflow::set_active_workspace(&workflow_state, Some(root.clone()));
+    }
 
     let index = match WorkspaceIndex::open(&root) {
         Ok(index) => Some(index),
@@ -118,6 +122,7 @@ fn start(app: AppHandle, state: &WatcherState, root: PathBuf) {
         }
     };
 
+    let app = app.clone();
     std::thread::spawn(move || {
         for event in events {
             if let Some(index) = &index {
@@ -163,7 +168,10 @@ fn start(app: AppHandle, state: &WatcherState, root: PathBuf) {
 /// The forwarding thread started in [`start`] exits on its own once the
 /// watcher's event channel disconnects, so this only needs to drop the
 /// watcher handle to stop the underlying OS watch.
-fn stop(state: &WatcherState) {
+fn stop(app: &AppHandle, state: &WatcherState) {
+    if let Some(workflow_state) = app.try_state::<crate::workflow::WorkflowState>() {
+        crate::workflow::set_active_workspace(&workflow_state, None);
+    }
     if let Some(watcher) = state.0.lock().unwrap().take() {
         watcher.stop();
     }

@@ -12,6 +12,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, LogicalPosition, Manager, State, WebviewWindow};
 
+use lattice_core::Workspace;
+
 pub const CAPTURE_SHELF_WINDOW_LABEL: &str = "capture-shelf";
 pub const CAPTURE_SHELF_UPDATED_EVENT: &str = "capture-shelf-updated";
 
@@ -33,6 +35,7 @@ pub struct CaptureShelfSnapshot {
     pub latest_title: Option<String>,
     pub destination_directory: Option<String>,
     pub workspace_root: Option<String>,
+    pub workspace_name: Option<String>,
 }
 
 #[derive(Default)]
@@ -106,13 +109,29 @@ fn snapshot_from(
     destination_directory: Option<String>,
     workspace_root: Option<String>,
 ) -> CaptureShelfSnapshot {
+    let workspace_name = workspace_root
+        .as_deref()
+        .map(workspace_display_name);
     CaptureShelfSnapshot {
         count: entries.len(),
         latest_title: entries.front().map(|entry| entry.title.clone()),
         entries: entries.iter().cloned().collect(),
         destination_directory,
         workspace_root,
+        workspace_name,
     }
+}
+
+fn workspace_display_name(root: &str) -> String {
+    Workspace::open(Path::new(root))
+        .map(|workspace| workspace.manifest().title.clone())
+        .unwrap_or_else(|_| {
+            Path::new(root)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("Workspace")
+                .to_string()
+        })
 }
 
 fn clip_title(page_path: &str) -> String {
@@ -214,11 +233,14 @@ mod tests {
 
     #[test]
     fn ring_buffer_keeps_latest_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "Test Workspace").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
         let state = CaptureShelfState::default();
         for index in 0..25 {
             state.record_ingest(
                 format!("Inbox/clip-{index}.md"),
-                "/tmp/workspace".to_string(),
+                root.clone(),
                 "Inbox".to_string(),
             );
         }
@@ -230,6 +252,7 @@ mod tests {
         assert_eq!(snapshot.entries[0].title, "clip-24.md");
         assert_eq!(snapshot.entries[MAX_ENTRIES - 1].page_path, "Inbox/clip-5.md");
         assert_eq!(snapshot.destination_directory.as_deref(), Some("Inbox"));
-        assert_eq!(snapshot.workspace_root.as_deref(), Some("/tmp/workspace"));
+        assert_eq!(snapshot.workspace_root.as_deref(), Some(root.as_str()));
+        assert_eq!(snapshot.workspace_name.as_deref(), Some("Test Workspace"));
     }
 }

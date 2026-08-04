@@ -12,15 +12,15 @@ mod shelf_platform;
 #[cfg(feature = "capture")]
 pub mod permission;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use arboard::Clipboard;
 use lattice_capture_core::{
     png_bytes_from_capture, CaptureBackend, CaptureDestination, CaptureError, CaptureSource,
     CapturedImage, ScreenshotPlan,
 };
-use lattice_core::Workspace;
-use lattice_handlers::ingest_captured_image;
+use lattice_core::{Workspace, WorkspaceEvent};
+use lattice_handlers::{ingest_captured_image, CatalogDelta, CatalogDeltaEvent};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -91,7 +91,7 @@ fn run_screen_clip(app: &AppHandle) -> Result<(), String> {
 }
 
 fn run_screen_clip_inner(app: &AppHandle) -> Result<(), String> {
-    let root = crate::workspace_root::resolve_default_workspace_root()
+    let root = crate::workspace_root::resolve_workspace_root(app)
         .ok_or_else(|| "open a workspace before capturing".to_string())?;
     let inbox_directory = capture_inbox_directory(&root)?;
     let backend = PlatformCaptureBackend::new();
@@ -106,6 +106,7 @@ fn run_screen_clip_inner(app: &AppHandle) -> Result<(), String> {
     let workspace_root = root.clone();
     let destination_directory = inbox_directory;
     copy_png_to_clipboard(&png_bytes)?;
+    emit_capture_catalog_delta(app, &root, &page_path, &result.asset_path);
     let _ = app.emit(
         CAPTURE_INGESTED_EVENT,
         CaptureIngestedPayload {
@@ -122,6 +123,44 @@ fn run_screen_clip_inner(app: &AppHandle) -> Result<(), String> {
     );
     crate::notification_actions::post_capture_ingested(app, &root, &page_path);
     Ok(())
+}
+
+fn emit_capture_catalog_delta(app: &AppHandle, root: &str, page_path: &str, asset_path: &str) {
+    let root_path = Path::new(root);
+    let full_asset_path = workspace_relative_asset_path(page_path, asset_path);
+    let mut entries = Vec::new();
+    for rel_path in [page_path, full_asset_path.as_str()] {
+        let event = WorkspaceEvent::Created {
+            path: PathBuf::from(rel_path),
+            revision: "capture-ingest".to_string(),
+        };
+        match lattice_handlers::catalog_delta_for_workspace_event(root_path, &event) {
+            Ok(Some(CatalogDelta::Upsert { entries: upserted })) => entries.extend(upserted),
+            Ok(Some(CatalogDelta::Replace { entries: replaced })) => entries.extend(replaced),
+            Ok(Some(CatalogDelta::Remove { .. } | CatalogDelta::Reorder { .. })) => {}
+            Ok(None) => {}
+            Err(err) => eprintln!("lattice: failed to build capture catalog-delta: {err}"),
+        }
+    }
+    if entries.is_empty() {
+        return;
+    }
+    let payload = CatalogDeltaEvent {
+        workspace_root: root.replace('\\', "/"),
+        delta: CatalogDelta::Upsert { entries },
+    };
+    if let Err(err) = app.emit(crate::watcher::CATALOG_DELTA_EVENT, payload) {
+        eprintln!("lattice: failed to emit capture catalog-delta: {err}");
+    }
+}
+
+fn workspace_relative_asset_path(page_path: &str, page_relative_asset: &str) -> String {
+    let page = Path::new(page_path);
+    let parent = page.parent().unwrap_or_else(|| Path::new(""));
+    parent
+        .join(page_relative_asset)
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 
 fn capture_inbox_directory(root: &str) -> Result<String, String> {

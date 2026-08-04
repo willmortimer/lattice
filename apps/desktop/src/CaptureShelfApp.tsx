@@ -14,6 +14,7 @@ interface CaptureShelfSnapshot {
   latestTitle: string | null;
   destinationDirectory: string | null;
   workspaceRoot: string | null;
+  workspaceName: string | null;
 }
 
 function formatTimestamp(ingestedAtMs: number): string {
@@ -21,6 +22,12 @@ function formatTimestamp(ingestedAtMs: number): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function savedDestinationLabel(snapshot: CaptureShelfSnapshot | null, count: number): string | null {
+  if (!snapshot || count === 0 || !snapshot.destinationDirectory) return null;
+  const workspace = snapshot.workspaceName ?? "workspace";
+  return `Saved to ${workspace} / ${snapshot.destinationDirectory}`;
 }
 
 export function CaptureShelfApp() {
@@ -41,7 +48,7 @@ export function CaptureShelfApp() {
   }, []);
 
   const count = snapshot?.count ?? 0;
-  const destination = snapshot?.destinationDirectory ?? "Inbox";
+  const destinationLabel = savedDestinationLabel(snapshot, count);
 
   async function hideShelf() {
     await invoke("capture_shelf_hide");
@@ -59,7 +66,9 @@ export function CaptureShelfApp() {
       <header className="capture-shelf__header" data-tauri-drag-region>
         <div className="capture-shelf__heading">
           <h1 className="capture-shelf__title">Capture Shelf</h1>
-          <p className="capture-shelf__destination">Saving to {destination}</p>
+          {destinationLabel ? (
+            <p className="capture-shelf__destination">{destinationLabel}</p>
+          ) : null}
         </div>
         <div className="capture-shelf__header-actions">
           <span className="capture-shelf__count">{count} clip{count === 1 ? "" : "s"}</span>

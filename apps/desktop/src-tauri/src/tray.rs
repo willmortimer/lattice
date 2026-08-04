@@ -89,7 +89,7 @@ pub fn open_quick_note(app: &AppHandle, requested_root: Option<String>) {
     std::thread::spawn(move || {
         let root = match requested_root.filter(|value| !value.trim().is_empty()) {
             Some(root) => Some(root),
-            None => workspace_root::resolve_default_workspace_root(),
+            None => workspace_root::resolve_workspace_root(&app),
         };
         let prepared = root
             .as_ref()
