@@ -243,13 +243,13 @@ mod windows_hello {
     use std::thread;
 
     use windows::core::{factory, HSTRING};
-    use windows::Foundation::IAsyncOperation;
     use windows::Security::Credentials::UI::{
         UserConsentVerificationResult, UserConsentVerifier,
     };
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::WinRT::IUserConsentVerifierInterop;
     use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
+    use windows_future::IAsyncOperation;
 
     use super::{
         map_user_consent_availability, map_user_consent_verification_result, PresenceError,

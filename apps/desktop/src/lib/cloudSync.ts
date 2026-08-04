@@ -293,5 +293,5 @@ export function pathForSyncResult(
   catalog: ReadonlyMap<string, CatalogEntry>,
   resourceId: string,
 ): string | null {
-  return pathForResourceId(catalog, resourceId);
+  return pathForResourceId(catalog, resourceId) ?? null;
 }

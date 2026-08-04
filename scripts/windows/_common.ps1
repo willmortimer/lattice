@@ -42,6 +42,24 @@ function Initialize-LatticeWindowsCargoEnv {
       $env:Path = "$dir;$env:Path"
     }
   }
+
+  # llama-cpp-sys bindgen needs libclang.dll (LLVM). Prefer an explicit LIBCLANG_PATH.
+  if (-not $env:LIBCLANG_PATH) {
+    $libclangDirs = @(
+      (Join-Path ${env:ProgramFiles} "LLVM\bin"),
+      (Join-Path ${env:ProgramFiles(x86)} "LLVM\bin"),
+      (Join-Path $env:LOCALAPPDATA "Programs\LLVM\bin")
+    )
+    foreach ($dir in $libclangDirs) {
+      if (Test-Path (Join-Path $dir "libclang.dll")) {
+        $env:LIBCLANG_PATH = $dir
+        $env:Path = "$dir;$env:Path"
+        break
+      }
+    }
+  } elseif (Test-Path $env:LIBCLANG_PATH) {
+    $env:Path = "$($env:LIBCLANG_PATH);$env:Path"
+  }
 }
 
 function Get-LatticeWindowsReleaseDir {

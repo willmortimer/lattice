@@ -133,6 +133,7 @@ windows = { version = "0.61", features = [
     "Win32_System_WinRT",
     "Win32_UI_WindowsAndMessaging",
 ] }
+windows-future = "0.2"
 lattice-capture-windows = { workspace = true, optional = true }
 lattice-audio-windows = { workspace = true, optional = true }
 

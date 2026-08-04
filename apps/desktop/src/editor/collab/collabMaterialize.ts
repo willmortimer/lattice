@@ -3,7 +3,7 @@ import type { JSONContent } from "@tiptap/core";
 import { joinFrontmatter } from "../markdown";
 import { bodyForPersistence, type PageMode } from "../pageDraft";
 import type { PageIO } from "../pageIO";
-import { createSerializedSaveController, type SerializedSaveController } from "../serializedSave";
+import { type SerializedSaveController } from "../serializedSave";
 import type { PagePersistMode } from "./collabSession";
 
 export interface MaterializePageInput {

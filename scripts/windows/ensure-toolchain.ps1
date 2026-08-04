@@ -101,5 +101,22 @@ if (-not $cmake) {
   & cmake.exe --version | Select-Object -First 1
 }
 
+# llama-cpp-sys bindgen needs libclang.dll from LLVM.
+$libclang = Join-Path ${env:ProgramFiles} "LLVM\bin\libclang.dll"
+if (-not (Test-Path $libclang)) {
+  $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+  if ($winget) {
+    Write-Host "lattice-winbuild-toolchain: installing LLVM (libclang for llama-cpp bindgen)…"
+    & winget.exe install --id LLVM.LLVM -e --accept-package-agreements --accept-source-agreements --disable-interactivity
+  } else {
+    Write-Host "lattice-winbuild-toolchain: libclang.dll missing — install LLVM (winget install LLVM.LLVM)"
+  }
+}
+if (Test-Path $libclang) {
+  $env:LIBCLANG_PATH = Split-Path -Parent $libclang
+  $env:Path = "$($env:LIBCLANG_PATH);$env:Path"
+  Write-Host "lattice-winbuild-toolchain: LIBCLANG_PATH=$($env:LIBCLANG_PATH)"
+}
+
 Write-Host "lattice-winbuild-toolchain: OK"
 exit 0
