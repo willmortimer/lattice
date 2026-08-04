@@ -6,6 +6,8 @@
 //! verified Qwen3 GGUF artifacts for real 512-d embeddings.
 
 mod backend;
+#[cfg(feature = "llama-cpp")]
+mod bench;
 mod client;
 mod error;
 mod framing;
@@ -14,6 +16,8 @@ mod server;
 mod spec;
 mod transport;
 
+#[cfg(feature = "llama-cpp")]
+pub use bench::{run_llama_bench, BenchStats, ENV_GGUF as BENCH_ENV_GGUF};
 pub use backend::BackendKind;
 pub use client::{
     socket_path_in, EmbedHostClient, EmbedHostSession, ReconnectableEmbedHostProvider,
