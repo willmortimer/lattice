@@ -3,7 +3,7 @@
 //! Canonical PCM for FluidAudio handoff is 16 kHz mono Float32
 //! ([docs/voice/audio-capture.md](../../docs/voice/audio-capture.md)).
 //! This crate owns ring/pre-roll contracts and the `CaptureProvider` trait;
-//! platform capture lives in `lattice-audio-macos` (and future backends).
+//! platform capture lives in `lattice-audio-macos` and `lattice-audio-windows`.
 
 mod error;
 mod event;

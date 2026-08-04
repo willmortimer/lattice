@@ -1,0 +1,26 @@
+[package]
+name = "lattice-audio-windows"
+description = "Windows WASAPI microphone capture (cpal) for Lattice voice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "lattice_audio_windows"
+path = "src/lib.rs"
+
+[dependencies]
+lattice-audio.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+
+[target.'cfg(windows)'.dependencies]
+cpal = "0.15"
+
+[dev-dependencies]
+lattice-audio.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
+
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]
+default-target = "x86_64-pc-windows-msvc"

@@ -104,12 +104,17 @@ Named-pipe transport landed in T2 (`apps/daemon` + `lattice-client`). Winbuild
 
 ### P1 — macOS-only desktop features
 
-Voice (`voice-embedded` / FluidAudio), Seatbelt, Quick Look, and overlay title bars
-are cfg’d off or degraded for Windows beta builds (`tauri.windows.conf.json`,
-macOS-only Cargo features for `voice` / `voice-embedded`). Screen capture
-(`capture` / WGC) is enabled on Windows NSIS builds via `--features capture` in
-`tauri-bundle.ps1` and `tauri:build:windows`. Manual smoke:
-[capture-smoke.md](./capture-smoke.md).
+Voice ASR (`voice-embedded` / FluidAudio), Seatbelt, Quick Look, and overlay title
+bars are cfg’d off or degraded for Windows beta builds (`tauri.windows.conf.json`,
+macOS-only Cargo features for FluidAudio). Screen capture (`capture` / WGC) is
+enabled on Windows NSIS builds via `--features capture` in `tauri-bundle.ps1` and
+`tauri:build:windows`. Manual smoke: [capture-smoke.md](./capture-smoke.md).
+
+**Mic capture (F4):** `lattice-audio-windows` uses **cpal → WASAPI** for the default
+input (16 kHz mono F32). Enable with `--features voice` (or `capture,voice`).
+`voice_status` reports `nativeCapture: true` when a default mic exists;
+`available` stays false until ASR/dictation host lands (Quick Note can show mic
+ready / ASR unavailable). FluidAudio remains deferred on Windows.
 
 ### P2 — Frontend toolchain on Windows host
 
