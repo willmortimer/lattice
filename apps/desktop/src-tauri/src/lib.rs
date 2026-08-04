@@ -51,11 +51,25 @@ mod workflow;
 mod workspace_catalog;
 mod workspace_root;
 
-use tauri::{Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    // Register first so second-instance argv (Windows SIWA) reaches the running process.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(
+            |app, args, _cwd| {
+                let urls = deep_link::deep_link_urls_from_argv(&args);
+                handle_deep_link_urls(app, urls);
+                show_and_focus_main(app);
+            },
+        ));
+    }
+
+    let builder = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -113,53 +127,12 @@ pub fn run() {
             }
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
-                for url in event.urls() {
-                    let url = url.as_str().to_string();
-                    match deep_link::classify_deep_link(&url) {
-                        Some(deep_link::DeepLinkAction::OAuthCallback(callback)) => {
-                            let _ = lattice_handlers::oauth_ingest_callback(callback);
-                            if let Some(main) = handle.get_webview_window("main") {
-                                let _ = main.set_focus();
-                            }
-                        }
-                        Some(deep_link::DeepLinkAction::CloudAuthCallback(payload)) => {
-                            match lattice_handlers::cloud_complete_desktop_handoff(
-                                payload.code,
-                                payload.state,
-                                payload.error,
-                            ) {
-                                Ok(status) => {
-                                    let _ = handle.emit("cloud-session-changed", &status);
-                                }
-                                Err(err) => {
-                                    let _ = handle.emit("cloud-sign-in-error", err);
-                                }
-                            }
-                            if let Some(main) = handle.get_webview_window("main") {
-                                let _ = main.unminimize();
-                                let _ = main.show();
-                                let _ = main.set_focus();
-                            }
-                        }
-                        Some(deep_link::DeepLinkAction::OpenResource(payload)) => {
-                            let _ = handle.emit("open-resource", &payload);
-                            if let Some(main) = handle.get_webview_window("main") {
-                                let _ = main.unminimize();
-                                let _ = main.show();
-                                let _ = main.set_focus();
-                            }
-                        }
-                        Some(deep_link::DeepLinkAction::OpenSettings(payload)) => {
-                            let _ = handle.emit("open-settings", &payload);
-                            if let Some(main) = handle.get_webview_window("main") {
-                                let _ = main.unminimize();
-                                let _ = main.show();
-                                let _ = main.set_focus();
-                            }
-                        }
-                        None => {}
-                    }
-                }
+                let urls = event
+                    .urls()
+                    .iter()
+                    .map(|url| url.as_str().to_string())
+                    .collect::<Vec<_>>();
+                handle_deep_link_urls(&handle, urls);
             });
             if let Some(state) = app.try_state::<app_lock::AppLockState>() {
                 app_lock::emit_status(app.handle(), &state.status());
@@ -457,6 +430,51 @@ pub fn run() {
                 let _ = (app, event);
             }
         });
+}
+
+fn handle_deep_link_urls(app: &AppHandle, urls: impl IntoIterator<Item = String>) {
+    for url in urls {
+        match deep_link::classify_deep_link(&url) {
+            Some(deep_link::DeepLinkAction::OAuthCallback(callback)) => {
+                let _ = lattice_handlers::oauth_ingest_callback(callback);
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.set_focus();
+                }
+            }
+            Some(deep_link::DeepLinkAction::CloudAuthCallback(payload)) => {
+                match lattice_handlers::cloud_complete_desktop_handoff(
+                    payload.code,
+                    payload.state,
+                    payload.error,
+                ) {
+                    Ok(status) => {
+                        let _ = app.emit("cloud-session-changed", &status);
+                    }
+                    Err(err) => {
+                        let _ = app.emit("cloud-sign-in-error", err);
+                    }
+                }
+                show_and_focus_main(app);
+            }
+            Some(deep_link::DeepLinkAction::OpenResource(payload)) => {
+                let _ = app.emit("open-resource", &payload);
+                show_and_focus_main(app);
+            }
+            Some(deep_link::DeepLinkAction::OpenSettings(payload)) => {
+                let _ = app.emit("open-settings", &payload);
+                show_and_focus_main(app);
+            }
+            None => {}
+        }
+    }
+}
+
+fn show_and_focus_main(app: &AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.unminimize();
+        let _ = main.show();
+        let _ = main.set_focus();
+    }
 }
 
 fn open_payload_for_file(path: &std::path::Path) -> Option<deep_link::OpenResourcePayload> {
