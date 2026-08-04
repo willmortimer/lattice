@@ -1,0 +1,24 @@
+[package]
+name = "lattice-workspace-crypto"
+description = "Workspace DEK lifecycle, keychain wrap, and AEAD helpers (ADR 0038)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = []
+# Thin OS keychain adapter via `keyring` platform backends (ADR 0038).
+keychain = ["dep:keyring"]
+
+[dependencies]
+aes-gcm = "0.10"
+rand = "0.8"
+thiserror.workspace = true
+zeroize = { version = "1", features = ["derive"] }
+keyring = { version = "3", optional = true, features = [
+    "apple-native",
+    "windows-native",
+    "linux-native",
+] }
