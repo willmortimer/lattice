@@ -104,6 +104,7 @@
             windows-cargo-check = "Mac→nixdev winbuild: probe + rustup + headless cargo check";
             windows-latticed-check = "Mac→nixdev winbuild: latticed release build";
             windows-nsis-bundle = "Mac→nixdev winbuild: unsigned NSIS installer DAG";
+            windows-nsis-demo-bundle = "Mac→nixdev winbuild: unsigned NSIS First Look demo installer";
           };
 
           scripts = {
@@ -315,6 +316,10 @@
             '';
             windows-nsis-bundle = ''
               export WINBUILD_TASKS="''${WINBUILD_TASKS:-probe ensure-toolchain build-sidecar verify-sidecars tauri-bundle}"
+              exec bash scripts/winbuild/remote-windows-check.sh "$@"
+            '';
+            windows-nsis-demo-bundle = ''
+              export WINBUILD_TASKS="''${WINBUILD_TASKS:-probe ensure-toolchain build-sidecar verify-sidecars tauri-bundle-demo}"
               exec bash scripts/winbuild/remote-windows-check.sh "$@"
             '';
           };
@@ -889,6 +894,24 @@
               windows-nsis-bundle = {
                 description = "Unsigned Windows NSIS installer via nixdev winbuild";
                 app = "windows-nsis-bundle";
+                category = "release";
+                paths = [
+                  "apps/**"
+                  "crates/**"
+                  "packages/**"
+                  "scripts/windows/**"
+                  "scripts/winbuild/**"
+                  ".winbuild.json"
+                  "pnpm-lock.yaml"
+                ];
+                resources = {
+                  cpu = 4;
+                  memory = "8GiB";
+                };
+              };
+              windows-nsis-demo-bundle = {
+                description = "Unsigned Windows NSIS First Look demo installer via nixdev winbuild";
+                app = "windows-nsis-demo-bundle";
                 category = "release";
                 paths = [
                   "apps/**"

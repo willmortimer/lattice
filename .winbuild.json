@@ -63,6 +63,14 @@
       "script": "scripts\\windows\\tauri-bundle.ps1",
       "timeoutSeconds": 10800,
       "requires": ["cargo.exe"]
+    },
+    "tauri-bundle-demo": {
+      "description": "Unsigned NSIS demo installer (First Look seed launcher)",
+      "workingDirectory": ".",
+      "runner": "powershell",
+      "script": "scripts\\windows\\tauri-bundle-demo.ps1",
+      "timeoutSeconds": 10800,
+      "requires": ["cargo.exe"]
     }
   }
 }

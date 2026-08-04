@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 
 pub use lattice_profile::{
     default_debug_home_path, lattice_dev_demo_overlay_path, lattice_dev_home_enabled,
-    lattice_dev_reset_demo_enabled, lattice_force_prod_home_enabled, lattice_home_path, LatticeHome,
-    DEFAULT_DEBUG_HOME_RELATIVE, DEFAULT_WORKSPACE_NAME, LATTICE_DEV_DEMO_OVERLAY_ENV,
-    LATTICE_DEV_HOME_ENV, LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME,
+    lattice_dev_reset_demo_enabled, lattice_force_prod_home_enabled, lattice_home_path,
+    lattice_seed_first_look_enabled, LatticeHome, DEFAULT_DEBUG_HOME_RELATIVE,
+    DEFAULT_WORKSPACE_NAME, LATTICE_DEV_DEMO_OVERLAY_ENV, LATTICE_DEV_HOME_ENV,
+    LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME, LATTICE_SEED_FIRST_LOOK_ENV,
     SETTINGS_DIR_NAME, STATE_DIR_NAME, WORKSPACES_DIR_NAME,
 };
 
@@ -74,7 +75,12 @@ pub fn initialize_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutco
 ///
 /// Used for local development when [`lattice_dev_home_enabled`] is true: an
 /// explicit `LATTICE_DEV_HOME`, or debug builds without `LATTICE_HOME` /
-/// `LATTICE_FORCE_PROD_HOME`. Production and release paths must keep using
+/// `LATTICE_FORCE_PROD_HOME`. Also used for release-safe First Look seeding when
+/// [`lattice_seed_first_look_enabled`] is true (`LATTICE_SEED_FIRST_LOOK`) —
+/// that path keeps the normal Lattice home (`~/Lattice` /
+/// `%USERPROFILE%\Lattice`) and does not redirect via `LATTICE_DEV_HOME`.
+///
+/// Production and release paths without the seed flag must keep using
 /// [`initialize_lattice_home`].
 ///
 /// When [`lattice_dev_reset_demo_enabled`] is true (`LATTICE_DEV_RESET_DEMO`),
@@ -181,7 +187,7 @@ fn remove_first_look_workspaces(home: &LatticeHome) -> Result<()> {
 
 /// Initialize the active Lattice home for the current process environment.
 pub fn initialize_active_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutcome)> {
-    if lattice_dev_home_enabled() {
+    if lattice_dev_home_enabled() || lattice_seed_first_look_enabled() {
         initialize_dev_lattice_home()
     } else {
         initialize_lattice_home()
@@ -371,11 +377,32 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         std::env::remove_var(LATTICE_DEV_HOME_ENV);
         std::env::remove_var(LATTICE_FORCE_PROD_HOME_ENV);
+        std::env::remove_var(LATTICE_SEED_FIRST_LOOK_ENV);
         std::env::set_var(LATTICE_HOME_ENV, directory.path());
         let (home, outcome) = initialize_active_lattice_home().unwrap();
         assert_eq!(home.root, directory.path());
         assert!(outcome.workspace.root().join("Welcome.md").is_file());
         assert!(!outcome.workspace.root().join("CRM.data").exists());
+        std::env::remove_var(LATTICE_HOME_ENV);
+    }
+
+    #[test]
+    fn seed_first_look_uses_normal_home_not_dev_redirect() {
+        let _guard = env_lock();
+        let directory = tempfile::tempdir().unwrap();
+        std::env::remove_var(LATTICE_DEV_HOME_ENV);
+        std::env::remove_var(LATTICE_FORCE_PROD_HOME_ENV);
+        std::env::set_var(LATTICE_HOME_ENV, directory.path());
+        std::env::set_var(LATTICE_SEED_FIRST_LOOK_ENV, "1");
+        let (home, outcome) = initialize_active_lattice_home().unwrap();
+        assert_eq!(home.root, directory.path());
+        assert!(outcome.workspace.root().join("CRM.data").is_dir());
+        assert!(outcome
+            .workspace
+            .root()
+            .file_name()
+            .is_some_and(|name| name == DEV_WORKSPACE_NAME));
+        std::env::remove_var(LATTICE_SEED_FIRST_LOOK_ENV);
         std::env::remove_var(LATTICE_HOME_ENV);
     }
 

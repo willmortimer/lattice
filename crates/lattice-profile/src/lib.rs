@@ -40,6 +40,10 @@ pub const LATTICE_DEV_DEMO_OVERLAY_ENV: &str = "LATTICE_DEV_DEMO_OVERLAY";
 pub const LATTICE_DEMO_DRIVER_ENV: &str = "LATTICE_DEMO_DRIVER";
 /// Absolute path to the shared scene script JSON (beats, stage, VO).
 pub const LATTICE_DEMO_SCENE_ENV: &str = "LATTICE_DEMO_SCENE";
+/// When set (`1`/`true`/`yes`), seed the First Look (`demo`) template on first
+/// ensure under the normal Lattice home (`%USERPROFILE%\Lattice` / `~/Lattice`).
+/// Unlike [`LATTICE_DEV_HOME_ENV`], this does **not** redirect the home path.
+pub const LATTICE_SEED_FIRST_LOOK_ENV: &str = "LATTICE_SEED_FIRST_LOOK";
 pub const LATTICE_HOME_NAME: &str = "Lattice";
 pub const DEFAULT_DEBUG_HOME_RELATIVE: &str = "target/dev-home";
 pub const WORKSPACES_DIR_NAME: &str = "Workspaces";
@@ -105,6 +109,11 @@ pub fn lattice_force_prod_home_enabled() -> bool {
 /// When true, wipe and re-seed the First Look demo workspace on startup.
 pub fn lattice_dev_reset_demo_enabled() -> bool {
     env_flag_enabled(LATTICE_DEV_RESET_DEMO_ENV)
+}
+
+/// When true, first-run provisioning seeds First Look under the normal Lattice home.
+pub fn lattice_seed_first_look_enabled() -> bool {
+    env_flag_enabled(LATTICE_SEED_FIRST_LOOK_ENV)
 }
 
 /// Private demo overlay directory from [`LATTICE_DEV_DEMO_OVERLAY_ENV`], if set
