@@ -58,6 +58,7 @@ PowerShell scripts under `scripts/windows/` mirror the macOS release leaves in
 | --- | --- |
 | `build-sidecar.ps1` | Release-build `latticed`, `lattice-agentd`, `lattice-embed-host` (`--features llama-cpp`) |
 | `verify-sidecars.ps1` | Assert sidecars exist; embed-host lists `fake` and `llama-cpp` |
+| `bench-embed-llama.ps1` | Time `lattice-embed-host` llama-cpp query embeds; prints dims + p50/p95 |
 | `assemble-app.ps1` | Copy sidecars beside `Lattice.exe` (called from `tauri-bundle`) |
 | `tauri-bundle.ps1` | `tauri build --no-bundle --target …` → assemble → `tauri bundle --bundles nsis --target …` (assemble must not `exit`, or NSIS is skipped) |
 
@@ -76,6 +77,38 @@ D:\lattice-target\windows-msvc\x86_64-pc-windows-msvc\release\bundle\nsis\*-setu
 
 `tauri.windows.conf.json` sets `bundle.targets = "nsis"`. Frontend builds use
 `pnpm tauri:build:windows` semantics (`--features capture`, no `voice-embedded`).
+
+### llama-cpp embed bench (F5)
+
+After `build-sidecar` (or any release build of `lattice-embed-host` with
+`--features llama-cpp`), time warm query embed latency against the pinned Qwen3
+GGUF:
+
+```powershell
+# On nixdev / Windows DevDrive (GGUF downloaded separately; ~640 MB)
+$env:LATTICE_EMBED_LLAMA_GGUF = "D:\models\Qwen3-Embedding-0.6B-Q8_0.gguf"
+$env:CARGO_TARGET_DIR = "D:\lattice-target\windows-msvc"   # optional; script defaults on D:
+.\scripts\windows\bench-embed-llama.ps1
+
+# Explicit paths / iteration counts
+.\scripts\windows\bench-embed-llama.ps1 `
+  -Exe "D:\lattice-target\windows-msvc\x86_64-pc-windows-msvc\release\lattice-embed-host.exe" `
+  -Gguf "D:\models\Qwen3-Embedding-0.6B-Q8_0.gguf" `
+  -Warmup 3 -Iterations 20 -Dimensions 512
+```
+
+Cross-platform (macOS/Linux) without the PowerShell wrapper:
+
+```sh
+export LATTICE_EMBED_LLAMA_GGUF=/path/to/Qwen3-Embedding-0.6B-Q8_0.gguf
+cargo run -p lattice-embed-host --release --features llama-cpp -- bench
+# or against an existing binary:
+./target/release/lattice-embed-host bench --gguf "$LATTICE_EMBED_LLAMA_GGUF"
+```
+
+The `bench` subcommand warms up (default 3), times query embeds (default 20),
+and prints dimensions plus p50/p95 latency in milliseconds. Pass `--json` for
+machine-readable output.
 
 ## Current blockers (ranked)
 
