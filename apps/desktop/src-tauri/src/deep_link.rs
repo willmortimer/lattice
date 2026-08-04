@@ -37,6 +37,29 @@ pub enum DeepLinkAction {
     OpenSettings(OpenSettingsPayload),
 }
 
+/// Extract deep-link URLs from a second-instance argv list (Windows protocol handler).
+pub fn deep_link_urls_from_argv(args: impl IntoIterator<Item = impl AsRef<str>>) -> Vec<String> {
+    args.into_iter()
+        .filter_map(|arg| {
+            let arg = arg.as_ref().trim();
+            if arg.is_empty() {
+                return None;
+            }
+            if arg.starts_with("lattice://") || looks_like_http_url(arg) {
+                Some(arg.to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn looks_like_http_url(s: &str) -> bool {
+    url::Url::parse(s)
+        .ok()
+        .is_some_and(|parsed| matches!(parsed.scheme(), "http" | "https"))
+}
+
 /// Classify a URL delivered by `tauri-plugin-deep-link` (custom scheme or https).
 pub fn classify_deep_link(url: &str) -> Option<DeepLinkAction> {
     let trimmed = url.trim();
@@ -280,6 +303,28 @@ mod tests {
             Some(DeepLinkAction::OpenSettings(OpenSettingsPayload {
                 path: "remote-access".into(),
             }))
+        );
+    }
+
+    #[test]
+    fn extracts_urls_from_argv() {
+        assert_eq!(
+            deep_link_urls_from_argv([
+                "C:\\Program Files\\Lattice\\Lattice.exe",
+                "lattice://oauth/cloud/callback?code=abc&state=desk1",
+            ]),
+            vec!["lattice://oauth/cloud/callback?code=abc&state=desk1".to_string()]
+        );
+        assert_eq!(
+            deep_link_urls_from_argv([
+                "lattice-desktop",
+                "https://app.lattice-notes.com/open?root=/tmp/ws&path=a.md",
+            ]),
+            vec!["https://app.lattice-notes.com/open?root=/tmp/ws&path=a.md".to_string()]
+        );
+        assert_eq!(
+            deep_link_urls_from_argv(["lattice-desktop", "--flag", "not-a-url"]),
+            Vec::<String>::new()
         );
     }
 

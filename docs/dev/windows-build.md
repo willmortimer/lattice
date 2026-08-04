@@ -128,3 +128,6 @@ D:\NixPlane\bin\winbuild.exe
 
 - NixPlane winbuild contract: `~/Developer/NixPlane/docs/WINBUILD.md`
 - Cloud browser SIWA (public Mac/Windows builds): desktop deep-link handoff
+  via `tauri-plugin-deep-link`; on Windows, `tauri-plugin-single-instance`
+  forwards `lattice://oauth/cloud/callback?…` argv into the running process
+  (SIWA pending state is process-local).
