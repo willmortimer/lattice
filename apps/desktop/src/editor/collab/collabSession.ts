@@ -1,5 +1,8 @@
 import * as Y from "yjs";
+import { Awareness } from "y-protocols/awareness";
 
+import { wireCollabAwarenessFanout } from "./awarenessFanout";
+import { collabCaretUser } from "./awarenessUser";
 import {
   applyCollabUpdate,
   closeCollabDoc,
@@ -22,6 +25,7 @@ export interface CollabSessionOptions {
 
 export interface CollabSessionHandle {
   readonly ydoc: Y.Doc;
+  readonly awareness: Awareness;
   readonly created: boolean;
   dispose: () => void;
 }
@@ -34,6 +38,24 @@ export async function openCollabSession(options: CollabSessionOptions): Promise<
   const ydoc = new Y.Doc();
   if (opened.update.length > 0) {
     Y.applyUpdate(ydoc, opened.update, REMOTE_ORIGIN);
+  }
+
+  const awareness = new Awareness(ydoc);
+  const localUser = collabCaretUser(awareness.clientID);
+  awareness.setLocalStateField("user", localUser);
+
+  let disposeAwarenessFanout: (() => void) | null = null;
+  try {
+    disposeAwarenessFanout = await wireCollabAwarenessFanout({
+      awareness,
+      workspaceRoot: options.workspaceRoot,
+      docId: options.docId,
+      onError: options.onError,
+    });
+  } catch (error) {
+    awareness.destroy();
+    ydoc.destroy();
+    throw error;
   }
 
   let pushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -76,6 +98,7 @@ export async function openCollabSession(options: CollabSessionOptions): Promise<
 
   return {
     ydoc,
+    awareness,
     created: opened.created,
     dispose: () => {
       if (disposed) return;
@@ -84,9 +107,11 @@ export async function openCollabSession(options: CollabSessionOptions): Promise<
       clearInterval(pullTimer);
       ydoc.off("update", onLocalUpdate);
       flushPush();
+      disposeAwarenessFanout?.();
       void closeCollabDoc(options.workspaceRoot, options.docId).catch((error) => {
         options.onError?.(String(error));
       });
+      awareness.destroy();
       ydoc.destroy();
     },
   };

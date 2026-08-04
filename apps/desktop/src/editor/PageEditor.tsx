@@ -230,6 +230,9 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   const [selectionToolbar, setSelectionToolbar] = useState<FloatingToolbarState | null>(null);
   const [blockToolbar, setBlockToolbar] = useState<FloatingToolbarState | null>(null);
   const [collabYdoc, setCollabYdoc] = useState<import("yjs").Doc | null>(null);
+  const [collabAwareness, setCollabAwareness] = useState<import("y-protocols/awareness").Awareness | null>(
+    null,
+  );
   const [collabCreated, setCollabCreated] = useState(false);
   const [collabLoading, setCollabLoading] = useState(false);
   const [collabError, setCollabError] = useState<string | null>(null);
@@ -477,6 +480,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       collabHandleRef.current?.dispose();
       collabHandleRef.current = null;
       setCollabYdoc(null);
+      setCollabAwareness(null);
       setCollabCreated(false);
       setCollabLoading(false);
       setCollabError(null);
@@ -505,6 +509,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         }
         collabHandleRef.current = handle;
         setCollabYdoc(handle.ydoc);
+        setCollabAwareness(handle.awareness);
         setCollabCreated(handle.created);
         setCollabLoading(false);
       })
@@ -524,11 +529,11 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   }, [collabDocId, pagePath, persistMode, workspaceRoot]);
 
   const editorExtensions = useMemo(() => {
-    if (persistMode === "collaborative" && collabYdoc) {
-      return collabLiveEditorExtensions(collabYdoc);
+    if (persistMode === "collaborative" && collabYdoc && collabAwareness) {
+      return collabLiveEditorExtensions(collabYdoc, collabAwareness);
     }
     return liveEditorExtensions;
-  }, [collabYdoc, persistMode]);
+  }, [collabAwareness, collabYdoc, persistMode]);
 
   const editorContent = useMemo(() => {
     if (persistMode === "collaborative") {
@@ -538,7 +543,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   }, [collabCreated, initialDoc, persistMode]);
 
   const editorEnabled =
-    persistMode === "plain" || (persistMode === "collaborative" && collabYdoc !== null);
+    persistMode === "plain" ||
+    (persistMode === "collaborative" && collabYdoc !== null && collabAwareness !== null);
 
   // The initial revision (on mount) is a "revision change" too — the parent
   // must learn it even though nothing was saved or reloaded yet.
