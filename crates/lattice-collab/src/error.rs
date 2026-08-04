@@ -32,4 +32,8 @@ pub enum Error {
         requested: String,
         resolved: String,
     },
+
+    /// Journal / snapshot I/O under `.lattice/collab/`.
+    #[error("collab journal I/O at {path}: {message}")]
+    Io { path: String, message: String },
 }

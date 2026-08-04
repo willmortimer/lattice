@@ -25,6 +25,15 @@ impl CollabSession {
         }
     }
 
+    /// Restore a session from an already-built [`Doc`] (snapshot ⊕ updates).
+    pub fn restored(resource_id: ResourceId, doc: Doc) -> Self {
+        Self {
+            resource_id,
+            doc,
+            open_count: 1,
+        }
+    }
+
     pub fn resource_id(&self) -> ResourceId {
         self.resource_id
     }

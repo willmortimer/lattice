@@ -50,7 +50,7 @@ pub struct DaemonState {
     pub semantic: Option<Arc<crate::embed_host::SemanticController>>,
     pub voice: Option<Arc<crate::voice_host::VoiceController>>,
     pub agent: Option<Arc<crate::agent::AgentController>>,
-    /// In-memory Yrs sessions (Y0); journal persistence is Y2.
+    /// Yrs sessions with optional `.lattice/collab/` journal persistence.
     pub collab: Arc<Mutex<CollabRegistry>>,
     connections: Option<Arc<ConnectionTracker>>,
     event_tx: broadcast::Sender<Event>,
@@ -1116,6 +1116,7 @@ fn collab_error_to_wire(err: lattice_collab::Error) -> WireError {
         lattice_collab::Error::Yrs { .. } => "collab_yrs_error",
         lattice_collab::Error::ResourceResolve { .. } => "collab_resource_resolve_failed",
         lattice_collab::Error::ResourceIdMismatch { .. } => "collab_resource_id_mismatch",
+        lattice_collab::Error::Io { .. } => "collab_journal_io_error",
     };
     WireError {
         code: code.into(),
@@ -1161,10 +1162,11 @@ async fn handle_apply_collab_update(
     update: Vec<u8>,
 ) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
 {
-    let _session = require_workspace_session(state, &workspace_id)?;
+    let session = require_workspace_session(state, &workspace_id)?;
+    let root = session.root().to_path_buf();
     let mut collab = state.collab.lock().await;
     let snapshot = collab
-        .apply_update(&doc_id, &update)
+        .apply_update(&doc_id, &update, Some(root.as_path()))
         .map_err(collab_error_to_wire)?;
     Ok((
         Response {
@@ -1209,9 +1211,12 @@ async fn handle_close_collab_doc(
     doc_id: String,
 ) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
 {
-    let _session = require_workspace_session(state, &workspace_id)?;
+    let session = require_workspace_session(state, &workspace_id)?;
+    let root = session.root().to_path_buf();
     let mut collab = state.collab.lock().await;
-    let closed = collab.close(&doc_id).map_err(collab_error_to_wire)?;
+    let closed = collab
+        .close(&doc_id, Some(root.as_path()))
+        .map_err(collab_error_to_wire)?;
     Ok((
         Response {
             body: Some(response::Body::CloseCollabDoc(CloseCollabDocResponse {
