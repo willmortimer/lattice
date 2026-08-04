@@ -1117,6 +1117,8 @@ fn collab_error_to_wire(err: lattice_collab::Error) -> WireError {
         lattice_collab::Error::ResourceResolve { .. } => "collab_resource_resolve_failed",
         lattice_collab::Error::ResourceIdMismatch { .. } => "collab_resource_id_mismatch",
         lattice_collab::Error::Io { .. } => "collab_journal_io_error",
+        lattice_collab::Error::RemotePayload { .. } => "collab_remote_payload_error",
+        lattice_collab::Error::RemoteConflict { .. } => "collab_remote_conflict",
     };
     WireError {
         code: code.into(),
