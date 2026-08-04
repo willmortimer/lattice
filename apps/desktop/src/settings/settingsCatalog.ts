@@ -389,6 +389,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
     keywords: ["labs", "cloud", "blob", "materialize", "authority"],
   },
   {
+    id: "features.labs-collaborative-page",
+    section: "features",
+    title: "Labs collaborative page editor",
+    description: "Opt-in Yjs collaborative editing for pages with registry ResourceIds.",
+    keywords: ["labs", "collab", "yjs", "tiptap", "collaborative"],
+  },
+  {
     id: "packs.catalog",
     section: "packs",
     title: "Downloadable packs",

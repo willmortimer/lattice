@@ -28,6 +28,8 @@ export interface FeaturesSettingsProps {
   workspaceRoot: string | null;
   semanticEnabled: boolean;
   onSemanticEnabledChange: (semanticEnabled: boolean) => void;
+  collaborativePageEditor: boolean;
+  onCollaborativePageEditorChange: (enabled: boolean) => void;
   onOpenPacks: () => void;
   onOpenCapabilities: () => void;
 }
@@ -68,6 +70,8 @@ export function FeaturesSettings({
   workspaceRoot,
   semanticEnabled,
   onSemanticEnabledChange,
+  collaborativePageEditor,
+  onCollaborativePageEditorChange,
   onOpenPacks,
   onOpenCapabilities,
 }: FeaturesSettingsProps) {
@@ -251,6 +255,17 @@ export function FeaturesSettings({
             use Inspect, the Files tree context menu, or the command palette on a selected resource.
             Requires Settings → Cloud account sign-in.
           </p>
+          <SettingRow
+            settingId="features.labs-collaborative-page"
+            title="Labs collaborative page editor"
+            description="Show Plain file / Collaborative toggles on pages with a registry ResourceId. Collaborative edits sync via Yjs daemon sessions — not markdown autosave."
+          >
+            <Toggle
+              checked={collaborativePageEditor}
+              onChange={onCollaborativePageEditorChange}
+              label="Enable collaborative page editor (Labs)"
+            />
+          </SettingRow>
           <SettingRow
             settingId="features.labs-cloud-blob"
             title="Labs cloud blob put/get"

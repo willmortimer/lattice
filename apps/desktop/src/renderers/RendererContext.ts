@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import type { AppSettings } from "../settings/model";
 import type { ResourceLinkTarget } from "../lib/resourceLinks";
+import type { CatalogEntry } from "../lib/resourceCatalog";
 import type { PageWidth } from "../lib/pageWidth";
 import type { PageEditorHandle } from "../editor/PageEditor";
 import type { SaveState } from "../editor/saveState";
@@ -10,6 +11,7 @@ export interface ResourceRendererContext {
   assetRoot: string | null;
   workspaceRoot: string | null;
   resources: readonly Resource[];
+  catalog: ReadonlyMap<string, CatalogEntry>;
   settings: AppSettings;
   pageEditorRef: RefObject<PageEditorHandle | null>;
   wikiTargets: readonly ResourceLinkTarget[];

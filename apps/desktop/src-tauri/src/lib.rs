@@ -12,6 +12,7 @@ mod capture;
 #[cfg(not(feature = "capture"))]
 mod capture_permission_stub;
 mod cloud;
+mod collab;
 mod commands;
 mod daemon_session;
 mod deck;
@@ -69,6 +70,7 @@ pub fn run() {
         .manage(resource_links::ResourceCatalogState::default())
         .manage(voice::VoiceState::default())
         .manage(semantic::SemanticState::default())
+        .manage(collab::CollabState::default())
         .manage(agent::AgentState::default())
         .manage(app_lock::AppLockState::load_from_profile());
 
@@ -375,6 +377,10 @@ pub fn run() {
             semantic::semantic_status,
             semantic::semantic_enable,
             semantic::semantic_disable,
+            collab::open_collab_doc,
+            collab::apply_collab_update,
+            collab::get_collab_state,
+            collab::close_collab_doc,
             scheduler::get_background_schedule_status,
             scheduler::set_background_schedules_enabled,
             remote_access::get_remote_access_status,
