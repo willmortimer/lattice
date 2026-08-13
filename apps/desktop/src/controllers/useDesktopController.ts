@@ -49,6 +49,10 @@ import { matchesKeybinding, useAppSettings } from "../settings/model";
 import type { SettingsDeepLinkTarget } from "../settings/settingsCatalog";
 import { resolveSettingsDeepLink } from "../settings/settingsCatalog";
 import {
+  openHelpDeepLinkUrl,
+  subscribeHelpDeepLink,
+} from "../help/helpDeepLink";
+import {
   openSettingsDeepLinkUrl,
   subscribeSettingsDeepLink,
 } from "../settings/settingsDeepLink";
@@ -114,6 +118,8 @@ export function useDesktopController() {
   const setSidebarWidth = useDesktopUiStore((state) => state.setSidebarWidth);
   const inspectorOpen = useDesktopUiStore((state) => state.inspectorOpen);
   const setInspectorOpen = useDesktopUiStore((state) => state.setInspectorOpen);
+  const helpOpen = useDesktopUiStore((state) => state.helpOpen);
+  const setHelpOpen = useDesktopUiStore((state) => state.setHelpOpen);
   const agentPanelOpen = useDesktopUiStore((state) => state.agentPanelOpen);
   const setAgentPanelOpen = useDesktopUiStore((state) => state.setAgentPanelOpen);
   const paletteOpen = useDesktopUiStore((state) => state.paletteOpen);
@@ -155,6 +161,7 @@ export function useDesktopController() {
   const [appLock, setAppLock] = useState<AppLockStatus>(defaultAppLockStatus);
   const [settingsDeepLinkTarget, setSettingsDeepLinkTarget] =
     useState<SettingsDeepLinkTarget | null>(null);
+  const [helpDeepLinkStem, setHelpDeepLinkStem] = useState<string | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const pageEditorRef = useRef<PageEditorHandle>(null);
@@ -220,6 +227,15 @@ export function useDesktopController() {
 
   const clearSettingsDeepLink = useCallback(() => {
     setSettingsDeepLinkTarget(null);
+  }, []);
+
+  const applyHelpDeepLink = useCallback((stem: string) => {
+    setHelpDeepLinkStem(stem);
+    setHelpOpen(true);
+  }, [setHelpOpen]);
+
+  const clearHelpDeepLink = useCallback(() => {
+    setHelpDeepLinkStem(null);
   }, []);
 
   useEffect(() => installNativeContextMenus(() => settingsRef.current.diagnostics.nativeContextMenus), []);
@@ -837,6 +853,21 @@ export function useDesktopController() {
   }, [applySettingsDeepLink]);
 
   useEffect(() => {
+    return subscribeHelpDeepLink(applyHelpDeepLink);
+  }, [applyHelpDeepLink]);
+
+  useEffect(() => {
+    if (!hasTauri) return;
+    let unlisten: (() => void) | undefined;
+    void listen<{ stem: string }>("open-help", (event) => {
+      applyHelpDeepLink(event.payload.stem);
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => unlisten?.();
+  }, [applyHelpDeepLink]);
+
+  useEffect(() => {
     if (!hasTauri) return;
     let unlisten: (() => void) | undefined;
     void listen<{ path: string }>("open-settings", (event) => {
@@ -850,6 +881,7 @@ export function useDesktopController() {
 
   useEffect(() => {
     if (!inBrowser || !window.location.hash) return;
+    if (openHelpDeepLinkUrl(window.location.hash)) return;
     openSettingsDeepLinkUrl(window.location.hash);
   }, []);
 
@@ -898,6 +930,11 @@ export function useDesktopController() {
         id: "action:workspace-tour",
         label: "Workspace tour",
         run: () => requestShellTourStart(),
+      },
+      {
+        id: "action:open-help",
+        label: "Open Help",
+        run: () => applyHelpDeepLink("welcome"),
       },
       {
         id: "action:theme-follow-system",
@@ -1057,6 +1094,8 @@ export function useDesktopController() {
   handleNewTableRef.current = handleNewTable;
   const setActivityAreaRef = useRef(navigationController.setActivityArea);
   setActivityAreaRef.current = navigationController.setActivityArea;
+  const applyHelpDeepLinkRef = useRef(applyHelpDeepLink);
+  applyHelpDeepLinkRef.current = applyHelpDeepLink;
 
   useEffect(() => {
     if (!hasTauri) return;
@@ -1129,6 +1168,9 @@ export function useDesktopController() {
         case "app.shell-tour":
           requestShellTourStart();
           break;
+        case "app.help":
+          applyHelpDeepLinkRef.current("welcome");
+          break;
         default:
           break;
       }
@@ -1189,15 +1231,16 @@ export function useDesktopController() {
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast, runtimeNotice,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
     settingsDeepLinkTarget, clearSettingsDeepLink,
+    helpDeepLinkStem, clearHelpDeepLink,
     csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     proposalSummaries, proposalInboxLoading, proposalApplyOutcome, proposalReview, refreshProposalInbox, openProposalReview,
     handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
     openProposalResourcePath, dismissProposalApplyOutcome,
-    openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
+    openTabs, navigation, inspectorOpen, helpOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
     paletteItems, hasCapability, setSettings, setStartup, applyDesktopSettings, applyStartupSettings, setError,
-    setSaveStatus: setActiveSaveStatus, setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen,    setActivityArea, setInspectorOpen, setAgentPanelOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
+    setSaveStatus: setActiveSaveStatus, setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen,    setActivityArea, setInspectorOpen, setHelpOpen, setAgentPanelOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
     handleTreeCollapsedPathsChange,
     setLinkPicker,
     setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, refreshProfile, handleGetStarted,

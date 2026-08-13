@@ -8,6 +8,12 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct OpenHelpPayload {
+    pub stem: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OpenSettingsPayload {
     pub path: String,
 }
@@ -35,6 +41,7 @@ pub enum DeepLinkAction {
     CloudAuthCallback(CloudAuthCallbackPayload),
     OpenResource(OpenResourcePayload),
     OpenSettings(OpenSettingsPayload),
+    OpenHelp(OpenHelpPayload),
 }
 
 /// Extract deep-link URLs from a second-instance argv list (Windows protocol handler).
@@ -79,6 +86,10 @@ pub fn classify_deep_link(url: &str) -> Option<DeepLinkAction> {
         return Some(DeepLinkAction::OpenSettings(OpenSettingsPayload { path }));
     }
 
+    if let Some(stem) = parse_lattice_help(trimmed) {
+        return Some(DeepLinkAction::OpenHelp(OpenHelpPayload { stem }));
+    }
+
     parse_open_resource(trimmed).map(DeepLinkAction::OpenResource)
 }
 
@@ -108,6 +119,27 @@ fn parse_lattice_settings(url: &str) -> Option<String> {
     let path = parsed.path().trim_start_matches('/');
     if path == "settings" || path.starts_with("settings/") {
         return Some(path.trim_start_matches("settings/").trim_matches('/').to_string());
+    }
+    None
+}
+
+fn parse_lattice_help(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url).ok()?;
+    if parsed.scheme() != "lattice" {
+        return None;
+    }
+    let host = parsed.host_str().unwrap_or("");
+    if host == "help" {
+        let stem = path_from_segments(&parsed);
+        return Some(if stem.is_empty() { "welcome".into() } else { stem });
+    }
+    let path = parsed.path().trim_start_matches('/');
+    if path == "help" {
+        return Some("welcome".into());
+    }
+    if path.starts_with("help/") {
+        let stem = path.trim_start_matches("help/").trim_matches('/');
+        return Some(if stem.is_empty() { "welcome".into() } else { stem.to_string() });
     }
     None
 }
@@ -286,6 +318,22 @@ mod tests {
             Some(DeepLinkAction::OpenResource(OpenResourcePayload {
                 root: "/tmp/ws".into(),
                 path: "a.md".into(),
+            }))
+        );
+    }
+
+    #[test]
+    fn classifies_help_paths() {
+        assert_eq!(
+            classify_deep_link("lattice://help/inspect"),
+            Some(DeepLinkAction::OpenHelp(OpenHelpPayload {
+                stem: "inspect".into(),
+            }))
+        );
+        assert_eq!(
+            classify_deep_link("lattice://help"),
+            Some(DeepLinkAction::OpenHelp(OpenHelpPayload {
+                stem: "welcome".into(),
             }))
         );
     }
