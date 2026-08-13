@@ -407,6 +407,32 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         self.get_json(&path, Some(bearer))
     }
 
+    /// Fetch opaque backup ciphertext for an owned workspace.
+    ///
+    /// When the response includes `X-Lattice-Content-Hash`, verifies the body
+    /// SHA-256 matches (same as [`Self::get_blob`]).
+    pub fn get_workspace_backup(
+        &self,
+        bearer: &str,
+        workspace_id: &str,
+        backup_id: &str,
+    ) -> Result<Vec<u8>> {
+        let path = format!("/v1/workspaces/{workspace_id}/backups/{backup_id}");
+        let response = self.http.request_bytes(
+            &self.base_url,
+            "GET",
+            &path,
+            None,
+            Some(bearer),
+            &[],
+        )?;
+        if response.status == 200 {
+            verify_response_content_hash(&response)?;
+            return Ok(response.body);
+        }
+        Err(bytes_api_error(response))
+    }
+
     pub fn get_blob(&self, bearer: &str, resource_id: ResourceId) -> Result<Vec<u8>> {
         let path = format!("/v1/blobs/{resource_id}");
         let response = self.http.request_bytes(
@@ -418,18 +444,7 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
             &[],
         )?;
         if response.status == 200 {
-            if let Some(header_hash) = response.content_hash.as_deref() {
-                let body_hash = ContentHash::from_bytes(&response.body)
-                    .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
-                let expected = ContentHash::new(format!("sha256:{header_hash}"))
-                    .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
-                if body_hash != expected {
-                    return Err(CloudError::InvalidResponse(format!(
-                        "response hash mismatch: header {header_hash}, body {}",
-                        content_hash_hex(&body_hash)
-                    )));
-                }
-            }
+            verify_response_content_hash(&response)?;
             return Ok(response.body);
         }
         Err(bytes_api_error(response))
@@ -506,6 +521,23 @@ fn content_hash_hex(hash: &ContentHash) -> &str {
     hash.as_str()
         .strip_prefix("sha256:")
         .unwrap_or(hash.as_str())
+}
+
+fn verify_response_content_hash(response: &CloudHttpBytesResponse) -> Result<()> {
+    let Some(header_hash) = response.content_hash.as_deref() else {
+        return Ok(());
+    };
+    let body_hash = ContentHash::from_bytes(&response.body)
+        .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
+    let expected = ContentHash::new(format!("sha256:{header_hash}"))
+        .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
+    if body_hash != expected {
+        return Err(CloudError::InvalidResponse(format!(
+            "response hash mismatch: header {header_hash}, body {}",
+            content_hash_hex(&body_hash)
+        )));
+    }
+    Ok(())
 }
 
 fn normalize_if_match(raw: &str) -> String {
@@ -918,5 +950,42 @@ mod tests {
             .unwrap();
         assert_eq!(metadata.content_hash, hash_hex);
         assert_eq!(metadata.size, data.len() as i64);
+    }
+
+    #[test]
+    fn get_workspace_backup_verifies_content_hash_header() {
+        let http = FakeCloudHttp::default();
+        let workspace_id = "cloud-ws-1";
+        let backup_id = "bk-1";
+        let data = b"opaque-client-ciphertext";
+        let hash = ContentHash::from_bytes(data).unwrap();
+        let hash_hex = content_hash_hex(&hash).to_string();
+        http.bytes_responses.lock().unwrap().insert(
+            format!("GET /v1/workspaces/{workspace_id}/backups/{backup_id}"),
+            CloudHttpBytesResponse {
+                status: 200,
+                body: data.to_vec(),
+                content_hash: Some(hash_hex.clone()),
+            },
+        );
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let body = client
+            .get_workspace_backup("good-token", workspace_id, backup_id)
+            .unwrap();
+        assert_eq!(body, data);
+
+        http.bytes_responses.lock().unwrap().insert(
+            format!("GET /v1/workspaces/{workspace_id}/backups/{backup_id}"),
+            CloudHttpBytesResponse {
+                status: 200,
+                body: data.to_vec(),
+                content_hash: Some("deadbeef".into()),
+            },
+        );
+        let err = client
+            .get_workspace_backup("good-token", workspace_id, backup_id)
+            .unwrap_err();
+        assert!(matches!(err, CloudError::InvalidResponse(_)));
+        assert!(err.to_string().contains("hash mismatch"));
     }
 }

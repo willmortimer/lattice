@@ -395,6 +395,7 @@ pub fn run() {
             workspace_backup::workspace_crypto_unlock_cmd,
             workspace_backup::workspace_crypto_lock_cmd,
             workspace_backup::put_encrypted_workspace_backup_cmd,
+            workspace_backup::restore_encrypted_workspace_backup_cmd,
             workspace_sync::push_pull_workspace_sync_cmd,
             workspace_sync::resolve_workspace_sync_conflict_cmd,
             collab_remote::push_collab_remote_snapshot_cmd,

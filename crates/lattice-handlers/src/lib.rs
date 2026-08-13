@@ -91,7 +91,8 @@ pub use workspace::{
 };
 pub use workspace_backup::{
     put_encrypted_workspace_backup, put_encrypted_workspace_backup_with_client,
-    EncryptedBackupPutResult,
+    restore_encrypted_workspace_backup, restore_encrypted_workspace_backup_with_client,
+    EncryptedBackupPutResult, EncryptedBackupRestoreResult, EncryptedBackupSkippedEntry,
 };
 pub use workspace_crypto::{
     workspace_crypto_lock, workspace_crypto_status, workspace_crypto_unlock,
