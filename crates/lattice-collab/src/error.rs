@@ -44,4 +44,13 @@ pub enum Error {
     /// Optimistic concurrency failure on remote put (`If-Match`).
     #[error("collab remote conflict: expected {expected}, actual {actual}")]
     RemoteConflict { expected: String, actual: String },
+
+    /// Append-only remote log exceeded size limits; caller should compact to LYRS.
+    #[error(
+        "collab remote log needs compaction: {update_count} updates, {byte_count} bytes"
+    )]
+    LogNeedsCompact {
+        update_count: usize,
+        byte_count: usize,
+    },
 }

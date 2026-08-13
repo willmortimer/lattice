@@ -25,8 +25,11 @@ pub use journal::{
 };
 pub use registry::{CollabRegistry, CollabSnapshot, OpenedDoc};
 pub use remote::{
-    collab_snapshot_resource_id, decode_remote_snapshot, encode_remote_snapshot,
-    exchange_snapshot_roundtrip, MemoryYrsRemoteStore, RemotePullResult, RemotePutResult,
-    YrsRemoteStore, REMOTE_SNAPSHOT_MAGIC, REMOTE_SNAPSHOT_VERSION,
+    append_update, collab_log_resource_id, collab_snapshot_resource_id, decode_remote_log,
+    decode_remote_snapshot, encode_remote_log, encode_remote_snapshot, exchange_snapshot_roundtrip,
+    MemoryYrsRemoteLogStore, MemoryYrsRemoteStore, RemoteLogDecoded, RemoteLogPullResult,
+    RemotePullResult, RemotePutResult, YrsRemoteLogStore, YrsRemoteStore, REMOTE_LOG_MAGIC,
+    REMOTE_LOG_MAX_BYTES, REMOTE_LOG_MAX_UPDATES, REMOTE_LOG_UNKNOWN_BASE_HASH,
+    REMOTE_LOG_VERSION, REMOTE_SNAPSHOT_MAGIC, REMOTE_SNAPSHOT_VERSION,
 };
 pub use session::CollabSession;
