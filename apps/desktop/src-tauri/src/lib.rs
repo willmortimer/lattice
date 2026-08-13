@@ -475,6 +475,10 @@ fn handle_deep_link_urls(app: &AppHandle, urls: impl IntoIterator<Item = String>
                 let _ = app.emit("open-settings", &payload);
                 show_and_focus_main(app);
             }
+            Some(deep_link::DeepLinkAction::OpenHelp(payload)) => {
+                let _ = app.emit("open-help", &payload);
+                show_and_focus_main(app);
+            }
             None => {}
         }
     }
