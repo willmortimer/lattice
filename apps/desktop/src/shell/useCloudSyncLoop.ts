@@ -39,6 +39,7 @@ export function useCloudSyncLoop(
         conflictCount: 0,
         errorCount: 0,
         cloudWorkspaceId: null,
+        conflictedResourceIds: [],
       });
     };
   }, [uiStore, workspaceRoot]);

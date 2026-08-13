@@ -137,6 +137,7 @@ export function createDesktopUiStore(
       conflictCount: 0,
       errorCount: 0,
       cloudWorkspaceId: null,
+      conflictedResourceIds: [],
     },
     sidebarWidth: initial?.sidebarWidth ?? 272,
     inspectorOpen: false,

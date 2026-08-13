@@ -55,6 +55,8 @@ export interface WorkspaceCloudSyncSnapshot {
   conflictCount: number;
   errorCount: number;
   cloudWorkspaceId: string | null;
+  /** Resource ids still waiting on Keep local / Take cloud. */
+  conflictedResourceIds: string[];
 }
 
 export const WORKSPACE_CLOUD_SYNC_DEBOUNCE_MS = 2_000;
@@ -66,6 +68,7 @@ const IDLE_SNAPSHOT: WorkspaceCloudSyncSnapshot = {
   conflictCount: 0,
   errorCount: 0,
   cloudWorkspaceId: null,
+  conflictedResourceIds: [],
 };
 
 export async function pushPullWorkspaceSync(
@@ -101,12 +104,15 @@ export function summarizeWorkspaceSyncReport(
   report: WorkspaceSyncRunReport,
 ): Pick<
   WorkspaceCloudSyncSnapshot,
-  "phase" | "message" | "conflictCount" | "errorCount" | "cloudWorkspaceId"
+  | "phase"
+  | "message"
+  | "conflictCount"
+  | "errorCount"
+  | "cloudWorkspaceId"
+  | "conflictedResourceIds"
 > {
-  const conflictCount = report.results.filter(
-    (result) =>
-      result.outcome === "skipped_conflicted" || result.status === "conflicted",
-  ).length;
+  const conflictedIds = conflictedResourceIds(report);
+  const conflictCount = conflictedIds.length;
   const errorCount = report.results.filter((result) => result.outcome === "failed").length;
   const pushed = report.results.some((result) => result.outcome === "pushed");
   const pulled = report.results.some((result) => result.outcome === "pulled");
@@ -121,6 +127,7 @@ export function summarizeWorkspaceSyncReport(
       conflictCount,
       errorCount,
       cloudWorkspaceId: report.cloudWorkspaceId,
+      conflictedResourceIds: conflictedIds,
     };
   }
   if (errorCount > 0) {
@@ -131,6 +138,7 @@ export function summarizeWorkspaceSyncReport(
       conflictCount,
       errorCount,
       cloudWorkspaceId: report.cloudWorkspaceId,
+      conflictedResourceIds: conflictedIds,
     };
   }
 
@@ -149,6 +157,7 @@ export function summarizeWorkspaceSyncReport(
     conflictCount,
     errorCount,
     cloudWorkspaceId: report.cloudWorkspaceId,
+    conflictedResourceIds: conflictedIds,
   };
 }
 
@@ -286,6 +295,7 @@ export class CloudSyncLoop {
           conflictCount: 0,
           errorCount: 1,
           cloudWorkspaceId: null,
+          conflictedResourceIds: [],
         });
         return null;
       } finally {
