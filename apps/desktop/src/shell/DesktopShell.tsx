@@ -29,6 +29,7 @@ import {
   List as MenuIcon,
   MagnifyingGlass,
   Plus,
+  Question,
   Robot,
   Sidebar,
   Sparkle,
@@ -110,6 +111,9 @@ const ConnectedRoots = lazy(() =>
 const CommandPalette = lazy(() =>
   import("../CommandPalette").then((module) => ({ default: module.CommandPalette })),
 );
+const HelpPanel = lazy(() =>
+  import("../help/HelpPanel").then((module) => ({ default: module.HelpPanel })),
+);
 
 export interface DesktopShellProps { model: ReturnType<typeof useDesktopController>; }
 
@@ -123,16 +127,17 @@ export function DesktopShell({ model }: DesktopShellProps) {
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
     treeCollapsedPaths, revealPath, linkPicker, csvImportReview,
     settingsDeepLinkTarget, clearSettingsDeepLink,
+    helpDeepLinkStem, clearHelpDeepLink,
     handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     proposalSummaries, proposalInboxLoading, proposalApplyOutcome, proposalReview, refreshProposalInbox, openProposalReview,
     handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
     openProposalResourcePath, dismissProposalApplyOutcome,
-    openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot,
+    openTabs, navigation, inspectorOpen, helpOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings,
     applyDesktopSettings, applyStartupSettings, setError,
     recents, page, setLinkPicker, handleImportEditorAsset,
-    setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen, setAgentPanelOpen,
+    setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen, setHelpOpen, setAgentPanelOpen,
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
     clearRecents, resetSettings, refreshProfile, handleGetStarted, handleOpenWorkspace, openRecent,
     openWorkspaceById, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
@@ -729,6 +734,13 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 <Robot size={16} />
               </IconButton>
               <IconButton
+                label={helpOpen ? "Hide help" : "Open help"}
+                className={helpOpen ? "header-button-active" : ""}
+                onClick={() => setHelpOpen((open) => !open)}
+              >
+                <Question size={16} />
+              </IconButton>
+              <IconButton
                 label={inspectorOpen ? "Hide inspector" : "Show inspector"}
                 className={inspectorOpen ? "header-button-active" : ""}
                 onClick={() => setInspectorOpen((open) => !open)}
@@ -912,6 +924,16 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 </div>
               )}
             </section>
+
+            {helpOpen && (
+              <Suspense fallback={<div className="surface-loading">Loading help…</div>}>
+                <HelpPanel
+                  deepLinkStem={helpDeepLinkStem}
+                  onDeepLinkConsumed={clearHelpDeepLink}
+                  onClose={() => setHelpOpen(false)}
+                />
+              </Suspense>
+            )}
 
             {inspectorOpen && (
               <ResourceInspector

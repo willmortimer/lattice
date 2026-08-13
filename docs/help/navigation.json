@@ -1,0 +1,27 @@
+[
+  {
+    "label": "Start here",
+    "items": [
+      { "label": "Welcome", "file": "welcome.md" },
+      { "label": "Open a workspace", "file": "first-workspace.md" },
+      { "label": "What to click", "file": "what-to-click.md" }
+    ]
+  },
+  {
+    "label": "Everyday work",
+    "items": [
+      { "label": "Write a page", "file": "pages.md" },
+      { "label": "Find things", "file": "find-and-jump.md" },
+      { "label": "Import a spreadsheet", "file": "import-csv.md" },
+      { "label": "Put work on a board", "file": "canvas.md" }
+    ]
+  },
+  {
+    "label": "When stuck",
+    "items": [
+      { "label": "Something looks wrong", "file": "something-wrong.md" },
+      { "label": "Inspect", "file": "inspect.md" },
+      { "label": "Working offline", "file": "offline.md" }
+    ]
+  }
+]

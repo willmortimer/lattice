@@ -63,6 +63,7 @@ export type DesktopUiState = {
   workspaceCloudSync: WorkspaceCloudSyncSnapshot;
   sidebarWidth: number;
   inspectorOpen: boolean;
+  helpOpen: boolean;
   agentPanelOpen: boolean;
   agentLayoutMode: AgentLayoutMode;
   agentFocusReturnMode: AgentFocusReturnMode;
@@ -88,6 +89,7 @@ export type DesktopUiState = {
   ) => void;
   setSidebarWidth: (width: number) => void;
   setInspectorOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+  setHelpOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setAgentPanelOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setAgentLayoutMode: (mode: AgentLayoutMode) => void;
   exitAgentFocus: () => void;
@@ -138,6 +140,7 @@ export function createDesktopUiStore(
     },
     sidebarWidth: initial?.sidebarWidth ?? 272,
     inspectorOpen: false,
+    helpOpen: false,
     agentPanelOpen: false,
     agentLayoutMode: "dock",
     agentFocusReturnMode: "dock",
@@ -208,6 +211,10 @@ export function createDesktopUiStore(
     setInspectorOpen: (open) =>
       set({
         inspectorOpen: typeof open === "function" ? open(get().inspectorOpen) : open,
+      }),
+    setHelpOpen: (open) =>
+      set({
+        helpOpen: typeof open === "function" ? open(get().helpOpen) : open,
       }),
     setAgentPanelOpen: (open) =>
       set({

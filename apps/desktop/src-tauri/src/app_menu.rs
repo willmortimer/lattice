@@ -31,6 +31,7 @@ pub const ACTION_UNDO: &str = "app.undo";
 pub const ACTION_HOME: &str = "app.home";
 pub const ACTION_FILES: &str = "app.files";
 pub const ACTION_SHELL_TOUR: &str = "app.shell-tour";
+pub const ACTION_HELP: &str = "app.help";
 pub const ACTION_QUIT: &str = "app.quit";
 
 pub const ACTION_WORKFLOW_OPEN_LATEST: &str = "workflow.open-latest";
@@ -141,7 +142,8 @@ pub fn handle_action(app: &AppHandle, id: &str) {
         | ACTION_UNDO
         | ACTION_HOME
         | ACTION_FILES
-        | ACTION_SHELL_TOUR => emit_ui_action(app, id),
+        | ACTION_SHELL_TOUR
+        | ACTION_HELP => emit_ui_action(app, id),
         #[cfg(debug_assertions)]
         ACTION_OPEN_INSPECTOR => {
             if let Some(window) = app.get_webview_window("main") {
@@ -233,6 +235,7 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         None::<&str>,
     )?;
+    let help_lattice = MenuItem::with_id(app, ACTION_HELP, "Lattice Help", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, ACTION_QUIT, "Quit Lattice", true, Some("CmdOrCtrl+Q"))?;
 
     let file_sep1 = PredefinedMenuItem::separator(app)?;
@@ -376,7 +379,7 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &[&search, &palette, &view_sep1, &home, &files],
     )?;
 
-    let help = Submenu::with_items(app, "Help", true, &[&help_workspace_tour])?;
+    let help = Submenu::with_items(app, "Help", true, &[&help_lattice, &help_workspace_tour])?;
 
     let win_sep = PredefinedMenuItem::separator(app)?;
     let win_min = PredefinedMenuItem::minimize(app, None)?;
