@@ -22,7 +22,11 @@ export type ExecuteOutcome =
   | "pushed"
   | "pulled"
   | "skipped_conflicted"
+  | "kept_local"
+  | "took_cloud"
   | "failed";
+
+export type ConflictResolution = "keep_local" | "take_cloud";
 
 export interface WorkspaceSyncExecuteResult {
   resourceId: string;
@@ -68,6 +72,29 @@ export async function pushPullWorkspaceSync(
   root: string,
 ): Promise<WorkspaceSyncRunReport> {
   return invoke<WorkspaceSyncRunReport>("push_pull_workspace_sync_cmd", { root });
+}
+
+/** Keep local (push with If-Match) or take cloud (pull) for one conflicted resource. */
+export async function resolveWorkspaceSyncConflict(
+  root: string,
+  resourceId: string,
+  resolution: ConflictResolution,
+): Promise<WorkspaceSyncExecuteResult> {
+  return invoke<WorkspaceSyncExecuteResult>("resolve_workspace_sync_conflict_cmd", {
+    root,
+    resourceId,
+    resolution,
+  });
+}
+
+/** Resource ids the planner left conflicted (for Inspect resolve UI). */
+export function conflictedResourceIds(report: WorkspaceSyncRunReport): string[] {
+  return report.results
+    .filter(
+      (result) =>
+        result.outcome === "skipped_conflicted" || result.status === "conflicted",
+    )
+    .map((result) => result.resourceId);
 }
 
 export function summarizeWorkspaceSyncReport(

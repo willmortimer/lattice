@@ -22,8 +22,8 @@ mod executor;
 mod sync_state;
 
 pub use executor::{
-    execute_plan_entry, local_snapshot_from_workspace, run_workspace_sync, ExecuteOutcome,
-    ExecuteResult, ExecutorError, SyncRunReport,
+    execute_plan_entry, local_snapshot_from_workspace, resolve_conflict, run_workspace_sync,
+    ConflictResolution, ExecuteOutcome, ExecuteResult, ExecutorError, SyncRunReport,
 };
 pub use sync_state::{SyncState, SyncStateError, SYNC_STATE_FILENAME};
 
