@@ -347,6 +347,82 @@ pub fn pull_collab_remote_log_with_client<C: CloudHttpClient>(
     }))
 }
 
+/// Replace the cloud LYRL sidecar blob without appending to the existing log.
+///
+/// Used after compaction: write a fresh LYRS snapshot, then reset the log with
+/// `base_hash` tied to that snapshot and an empty or trimmed update list.
+pub fn replace_collab_remote_log(
+    root: &str,
+    page_resource_id: &str,
+    base_hash: Option<&[u8]>,
+    updates: &[Vec<u8>],
+) -> Result<CollabRemoteLogPushResult, String> {
+    let bearer = resolve_cloud_bearer_cmd()?;
+    replace_collab_remote_log_with_client(
+        &api_client(),
+        &bearer,
+        root,
+        page_resource_id,
+        base_hash,
+        updates,
+    )
+}
+
+pub fn replace_collab_remote_log_with_client<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    bearer: &str,
+    root: &str,
+    page_resource_id: &str,
+    base_hash: Option<&[u8]>,
+    updates: &[Vec<u8>],
+) -> Result<CollabRemoteLogPushResult, String> {
+    let page_id = parse_doc_resource_id(page_resource_id).map_err(map_err)?;
+    let sidecar_id = collab_log_resource_id(page_id);
+
+    let workspace = Workspace::open(Path::new(root)).map_err(map_err)?;
+    let manifest = workspace.manifest();
+    let cloud_workspace = ensure_cloud_workspace(
+        client,
+        bearer,
+        &manifest.id.to_string(),
+        manifest.title.as_str(),
+    )?;
+
+    let existing = match client.get_blob(bearer, sidecar_id) {
+        Ok(bytes) => bytes,
+        Err(CloudError::Api { status: 404, .. }) => Vec::new(),
+        Err(err) => return Err(map_err(err)),
+    };
+    let if_match = if existing.is_empty() {
+        None
+    } else {
+        let hash = ContentHash::from_bytes(&existing).map_err(map_err)?;
+        Some(hash_hex(&hash))
+    };
+
+    let base = parse_base_hash(base_hash)?;
+    let update_refs: Vec<&[u8]> = updates.iter().map(Vec::as_slice).collect();
+    let payload = encode_remote_log(page_id, base, &update_refs);
+
+    let hash = client
+        .put_workspace_blob(
+            bearer,
+            Some(&cloud_workspace.id),
+            sidecar_id,
+            &payload,
+            if_match.as_deref(),
+        )
+        .map_err(map_err)?;
+
+    Ok(CollabRemoteLogPushResult {
+        page_id: page_id.to_string(),
+        sidecar_id: sidecar_id.to_string(),
+        cloud_workspace_id: cloud_workspace.id,
+        content_hash: hash_hex(&hash),
+        base_hash: base.to_vec(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -673,5 +749,53 @@ mod tests {
         )
         .unwrap();
         assert_eq!(pushed.base_hash, vec![0x11; 32]);
+    }
+
+    #[test]
+    fn replace_log_after_fat_log_then_append_succeeds() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "Demo").unwrap();
+        let page = ResourceId::new();
+        let sidecar = collab_log_resource_id(page);
+        let stubs: Vec<Vec<u8>> = (0..REMOTE_LOG_MAX_UPDATES).map(|i| vec![i as u8]).collect();
+        let refs: Vec<&[u8]> = stubs.iter().map(|u| u.as_slice()).collect();
+        let fat_payload = encode_remote_log(page, REMOTE_LOG_UNKNOWN_BASE_HASH, &refs);
+
+        let http = FakeHttp::default();
+        http.blobs
+            .lock()
+            .unwrap()
+            .insert(sidecar.to_string(), fat_payload);
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let root = dir.path().to_str().unwrap();
+        let page_str = page.to_string();
+
+        let new_base = [0xcd; 32];
+        let replaced = replace_collab_remote_log_with_client(
+            &client,
+            "tok",
+            root,
+            &page_str,
+            Some(&new_base),
+            &[],
+        )
+        .unwrap();
+        assert_eq!(replaced.base_hash, new_base.to_vec());
+        assert_eq!(replaced.sidecar_id, sidecar.to_string());
+
+        let pulled = pull_collab_remote_log_with_client(&client, "tok", root, &page_str)
+            .unwrap()
+            .expect("log present after replace");
+        assert!(pulled.updates.is_empty());
+        assert_eq!(pulled.base_hash, new_base);
+
+        let next = make_text_update("after compact");
+        push_collab_remote_log_with_client(&client, "tok", root, &page_str, &next, Some(&new_base))
+            .unwrap();
+
+        let pulled = pull_collab_remote_log_with_client(&client, "tok", root, &page_str)
+            .unwrap()
+            .expect("log present after append");
+        assert_eq!(pulled.updates, vec![next]);
     }
 }

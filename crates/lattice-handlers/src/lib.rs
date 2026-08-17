@@ -48,7 +48,8 @@ pub use collab_remote::{
     pull_collab_remote_log, pull_collab_remote_log_with_client, pull_collab_remote_snapshot,
     pull_collab_remote_snapshot_with_client, push_collab_remote_log,
     push_collab_remote_log_with_client, push_collab_remote_snapshot,
-    push_collab_remote_snapshot_with_client, CollabRemoteLogPullResult, CollabRemoteLogPushResult,
+    push_collab_remote_snapshot_with_client, replace_collab_remote_log,
+    replace_collab_remote_log_with_client, CollabRemoteLogPullResult, CollabRemoteLogPushResult,
     CollabRemotePullResult, CollabRemotePushResult,
 };
 pub use error::{command_error_to_string, STALE_REVISION_PREFIX};

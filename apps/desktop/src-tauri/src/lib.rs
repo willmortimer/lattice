@@ -406,6 +406,7 @@ pub fn run() {
             collab_remote::pull_collab_remote_snapshot_cmd,
             collab_remote::push_collab_remote_log_cmd,
             collab_remote::pull_collab_remote_log_cmd,
+            collab_remote::replace_collab_remote_log_cmd,
             spotlight::spotlight_index_workspace,
             #[cfg(feature = "capture")]
             capture::shelf::capture_shelf_snapshot,

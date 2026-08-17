@@ -103,7 +103,7 @@ describe("collabSession", () => {
     session.dispose();
   });
 
-  it("exchanges Yrs updates through the remote provider when cloud signed-in", async () => {
+  it("pulls LYRL log and appends local edits without snapshot push each poll", async () => {
     const peer = new Y.Doc();
     peer.getText("content").insert(0, "from-peer");
     const remoteUpdate = Y.encodeStateAsUpdate(peer);
@@ -129,18 +129,22 @@ describe("collabSession", () => {
       user: null,
       cloudUrl: "https://cloud.test",
     } as never);
-    vi.spyOn(collabRemoteRpc, "pullCollabRemoteSnapshot").mockResolvedValue({
+    vi.spyOn(collabRemoteRpc, "pullCollabRemoteLog").mockResolvedValue({
       pageId: "0190abcdef0123456789abcdef012345",
-      sidecarId: "sidecar",
+      sidecarId: "log-sidecar",
       cloudWorkspaceId: "cws",
-      contentHash: "abc",
-      update: remoteUpdate,
+      contentHash: "loghash",
+      baseHash: Uint8Array.from({ length: 32, fill: 0xab }),
+      updates: [remoteUpdate],
     });
-    const pushSpy = vi.spyOn(collabRemoteRpc, "pushCollabRemoteSnapshot").mockResolvedValue({
+    const pullSnapshotSpy = vi.spyOn(collabRemoteRpc, "pullCollabRemoteSnapshot");
+    const pushSnapshotSpy = vi.spyOn(collabRemoteRpc, "pushCollabRemoteSnapshot");
+    const pushLogSpy = vi.spyOn(collabRemoteRpc, "pushCollabRemoteLog").mockResolvedValue({
       pageId: "0190abcdef0123456789abcdef012345",
-      sidecarId: "sidecar",
+      sidecarId: "log-sidecar",
       cloudWorkspaceId: "cws",
-      contentHash: "def",
+      contentHash: "newlog",
+      baseHash: Uint8Array.from({ length: 32, fill: 0xab }),
     });
 
     const session = await openCollabSession({
@@ -153,12 +157,137 @@ describe("collabSession", () => {
     expect(session.remoteProviderActive).toBe(true);
     expect(session.ydoc.getText("content").toString()).toBe("from-peer");
     expect(applySpy).toHaveBeenCalled();
-    expect(pushSpy).toHaveBeenCalled();
+    expect(pullSnapshotSpy).not.toHaveBeenCalled();
+    expect(pushSnapshotSpy).not.toHaveBeenCalled();
+
+    session.ydoc.getText("content").insert(0, "local");
+    await vi.advanceTimersByTimeAsync(COLLAB_PUSH_DEBOUNCE_MS);
+    await Promise.resolve();
+
+    expect(pushLogSpy).toHaveBeenCalled();
+    expect(pushSnapshotSpy).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(COLLAB_REMOTE_SYNC_INTERVAL_MS);
     await Promise.resolve();
-    expect(pushSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(pushSnapshotSpy).not.toHaveBeenCalled();
 
     session.dispose();
+  });
+
+  it("compacts to LYRS and replaces log when append returns log_needs_compact", async () => {
+    vi.spyOn(collabRpc, "openCollabDoc").mockResolvedValue({
+      docId: "0190abcdef0123456789abcdef012345",
+      stateVector: Uint8Array.from([]),
+      update: Uint8Array.from([]),
+      created: true,
+    });
+    vi.spyOn(collabRpc, "applyCollabUpdate").mockResolvedValue({
+      docId: "0190abcdef0123456789abcdef012345",
+      stateVector: Uint8Array.from([1]),
+    });
+    vi.spyOn(collabRpc, "getCollabState").mockResolvedValue({
+      docId: "0190abcdef0123456789abcdef012345",
+      stateVector: Uint8Array.from([1]),
+      update: Uint8Array.from([]),
+    });
+    vi.spyOn(collabRpc, "closeCollabDoc").mockResolvedValue({ closed: true });
+    vi.spyOn(cloud, "getCloudSessionStatus").mockResolvedValue({
+      signedIn: true,
+      user: null,
+      cloudUrl: "https://cloud.test",
+    } as never);
+    vi.spyOn(collabRemoteRpc, "pullCollabRemoteLog").mockResolvedValue(null);
+
+    const pushLogSpy = vi.spyOn(collabRemoteRpc, "pushCollabRemoteLog");
+    pushLogSpy
+      .mockRejectedValueOnce(new Error("log_needs_compact: 256 updates, 1024 bytes"))
+      .mockResolvedValueOnce({
+        pageId: "0190abcdef0123456789abcdef012345",
+        sidecarId: "log-sidecar",
+        cloudWorkspaceId: "cws",
+        contentHash: "retrylog",
+        baseHash: Uint8Array.from({ length: 32, fill: 0xcd }),
+      });
+
+    const pushSnapshotSpy = vi.spyOn(collabRemoteRpc, "pushCollabRemoteSnapshot").mockResolvedValue({
+      pageId: "0190abcdef0123456789abcdef012345",
+      sidecarId: "snap-sidecar",
+      cloudWorkspaceId: "cws",
+      contentHash: "snaphash",
+    });
+    const replaceLogSpy = vi.spyOn(collabRemoteRpc, "replaceCollabRemoteLog").mockResolvedValue({
+      pageId: "0190abcdef0123456789abcdef012345",
+      sidecarId: "log-sidecar",
+      cloudWorkspaceId: "cws",
+      contentHash: "emptylog",
+      baseHash: Uint8Array.from({ length: 32, fill: 0xcd }),
+    });
+
+    const session = await openCollabSession({
+      workspaceRoot: "/ws",
+      docId: "0190abcdef0123456789abcdef012345",
+      pagePath: "Notes.md",
+      remoteProviderEnabled: true,
+    });
+
+    session.ydoc.getText("content").insert(0, "compact me");
+    await vi.advanceTimersByTimeAsync(COLLAB_PUSH_DEBOUNCE_MS);
+    await Promise.resolve();
+
+    expect(pushLogSpy).toHaveBeenCalledTimes(2);
+    expect(pushSnapshotSpy).toHaveBeenCalledTimes(1);
+    expect(replaceLogSpy).toHaveBeenCalledWith(
+      "/ws",
+      "0190abcdef0123456789abcdef012345",
+      "snaphash",
+      [],
+    );
+
+    session.dispose();
+  });
+
+  it("flushes pending LYRL append on dispose before debounce", async () => {
+    vi.spyOn(collabRpc, "openCollabDoc").mockResolvedValue({
+      docId: "0190abcdef0123456789abcdef012345",
+      stateVector: Uint8Array.from([]),
+      update: Uint8Array.from([]),
+      created: true,
+    });
+    vi.spyOn(collabRpc, "applyCollabUpdate").mockResolvedValue({
+      docId: "0190abcdef0123456789abcdef012345",
+      stateVector: Uint8Array.from([1]),
+    });
+    vi.spyOn(collabRpc, "getCollabState").mockResolvedValue({
+      docId: "0190abcdef0123456789abcdef012345",
+      stateVector: Uint8Array.from([1]),
+      update: Uint8Array.from([]),
+    });
+    vi.spyOn(collabRpc, "closeCollabDoc").mockResolvedValue({ closed: true });
+    vi.spyOn(cloud, "getCloudSessionStatus").mockResolvedValue({
+      signedIn: true,
+      user: null,
+      cloudUrl: "https://cloud.test",
+    } as never);
+    vi.spyOn(collabRemoteRpc, "pullCollabRemoteLog").mockResolvedValue(null);
+    const pushLogSpy = vi.spyOn(collabRemoteRpc, "pushCollabRemoteLog").mockResolvedValue({
+      pageId: "0190abcdef0123456789abcdef012345",
+      sidecarId: "log-sidecar",
+      cloudWorkspaceId: "cws",
+      contentHash: "flushlog",
+      baseHash: Uint8Array.from({ length: 32, fill: 0xab }),
+    });
+
+    const session = await openCollabSession({
+      workspaceRoot: "/ws",
+      docId: "0190abcdef0123456789abcdef012345",
+      pagePath: "Notes.md",
+      remoteProviderEnabled: true,
+    });
+
+    session.ydoc.getText("content").insert(0, "unsaved");
+    session.dispose();
+    await Promise.resolve();
+
+    expect(pushLogSpy).toHaveBeenCalled();
   });
 });

@@ -2,8 +2,8 @@
 
 use lattice_handlers::{
     pull_collab_remote_log, pull_collab_remote_snapshot, push_collab_remote_log,
-    push_collab_remote_snapshot, CollabRemoteLogPullResult, CollabRemoteLogPushResult,
-    CollabRemotePullResult, CollabRemotePushResult,
+    push_collab_remote_snapshot, replace_collab_remote_log, CollabRemoteLogPullResult,
+    CollabRemoteLogPushResult, CollabRemotePullResult, CollabRemotePushResult,
 };
 
 /// PUT a full Yrs update to the cloud sidecar blob for `doc_id`.
@@ -56,4 +56,24 @@ pub fn pull_collab_remote_log_cmd(
     doc_id: String,
 ) -> Result<Option<CollabRemoteLogPullResult>, String> {
     pull_collab_remote_log(&root, &doc_id)
+}
+
+/// Replace the cloud LYRL sidecar for `doc_id` (no append).
+///
+/// `base_hash` is the 64-character hex SHA-256 of the LYRS snapshot this log is
+/// based on. Omit or pass empty for [`REMOTE_LOG_UNKNOWN_BASE_HASH`].
+/// `updates` may be empty after compaction.
+#[tauri::command]
+pub fn replace_collab_remote_log_cmd(
+    root: String,
+    doc_id: String,
+    base_hash: Option<String>,
+    updates: Vec<Vec<u8>>,
+) -> Result<CollabRemoteLogPushResult, String> {
+    replace_collab_remote_log(
+        &root,
+        &doc_id,
+        base_hash.as_deref().map(str::as_bytes),
+        &updates,
+    )
 }

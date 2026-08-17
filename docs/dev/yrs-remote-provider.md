@@ -31,7 +31,7 @@ Payload (`LYRS` v1) — **default** remote catch-up path (S8):
 blobs never collide).
 
 Payload (`LYRL` v1) — incremental catch-up without replacing the whole Y.Doc
-each poll (available for desktop wire-up; compaction is caller-driven):
+each poll (desktop `openCollabSession` default when a log sidecar exists):
 
 | Field | Size | Notes |
 | --- | --- | --- |
@@ -51,10 +51,15 @@ snapshot and start a new log (optionally recording the snapshot content hash in
 ## Client path
 
 1. Desktop Labs toggles: collaborative page editor + remote Yrs provider.
-2. When remote is enabled and cloud is signed in, `openCollabSession` still
-   polls the **LYRS snapshot** only: pull sidecar → apply to Y.Doc (and daemon
-   journal) → push merged full state.
-   <!-- TODO(wave 2): wire `openCollabSession` to poll/append LYRL alongside LYRS -->
+2. When remote is enabled and cloud is signed in, `openCollabSession` polls the
+   **LYRL append log** on each remote sync interval: pull sidecar → apply each
+   lib0 update to the Y.Doc (and daemon journal). If no log exists yet, fall back
+   once to the **LYRS snapshot** sidecar (first peer or pre-LYRL deployments).
+   Local edits debounce-append to LYRL via `pushCollabRemoteLog`; they do not
+   push a full snapshot on every poll. When append returns `log_needs_compact`,
+   compact writes a fresh LYRS snapshot then `replace_collab_remote_log` resets
+   the log (empty updates, `base_hash` = snapshot content hash) before retrying
+   the pending append.
 3. Handlers (cloud blob PUT/GET, no new server routes):
    - Snapshot: `push_collab_remote_snapshot` / `pull_collab_remote_snapshot`
      (Tauri: `push_collab_remote_snapshot_cmd` / `pull_collab_remote_snapshot_cmd`).
@@ -62,9 +67,10 @@ snapshot and start a new log (optionally recording the snapshot content hash in
      (Tauri: `push_collab_remote_log_cmd` / `pull_collab_remote_log_cmd`).
      Push pulls the existing LYRL blob (404 → empty), `append_update`, then PUT
      with `If-Match` so two peers do not clobber. Exceeding log limits returns
-     an error string containing `log_needs_compact` (desktop compact/reset of
-     the log after writing a fresh LYRS snapshot is still TODO in
-     `openCollabSession`).
+     an error string containing `log_needs_compact`.
+   - Replace log: `replace_collab_remote_log`
+     (Tauri: `replace_collab_remote_log_cmd`). PUTs `encode_remote_log` without
+     append — used after compaction to reset the sidecar.
 4. Core types + in-memory stores: `lattice_collab::remote`
    (`YrsRemoteStore`, `YrsRemoteLogStore`, `encode_remote_log`,
    `decode_remote_log`, `append_update`, `collab_log_resource_id`).
