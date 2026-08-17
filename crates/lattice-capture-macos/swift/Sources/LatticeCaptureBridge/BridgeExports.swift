@@ -49,6 +49,40 @@ public func lattice_capture_enumerate_displays(
     }
 }
 
+@_cdecl("lattice_capture_enumerate_windows")
+public func lattice_capture_enumerate_windows(
+    out: UnsafeMutablePointer<lattice_capture_window_info_t>?,
+    outCapacity: UInt32,
+    outCount: UnsafeMutablePointer<UInt32>?
+) -> Int32 {
+    bridgeCatch {
+        guard let outCount else {
+            throw BridgeFailure.invalidArgument("out_count is null")
+        }
+        if outCapacity > 0 && out == nil {
+            throw BridgeFailure.invalidArgument("out is null")
+        }
+
+        if #available(macOS 14.0, *) {
+            let windows = try runCaptureBlocking {
+                try await ScreenCaptureSession.enumerateWindows()
+            }
+            let limit = min(Int(outCapacity), windows.count)
+            if limit > 0, let out {
+                for index in 0 ..< limit {
+                    var info = lattice_capture_window_info_t()
+                    writeWindowInfo(windows[index], into: &info)
+                    out[index] = info
+                }
+            }
+            outCount.pointee = UInt32(limit)
+            return BridgeErrorCode.ok.rawValue
+        }
+
+        throw BridgeFailure.unsupported("ScreenCaptureKit requires macOS 14+")
+    }
+}
+
 @_cdecl("lattice_capture_capture_display")
 public func lattice_capture_capture_display(
     displayId: UInt32,
@@ -61,6 +95,26 @@ public func lattice_capture_capture_display(
         if #available(macOS 14.0, *) {
             let captured = try runCaptureBlocking {
                 try await ScreenCaptureSession.captureDisplay(displayId: displayId)
+            }
+            try writeImage(captured, into: outImage)
+            return BridgeErrorCode.ok.rawValue
+        }
+        throw BridgeFailure.unsupported("ScreenCaptureKit requires macOS 14+")
+    }
+}
+
+@_cdecl("lattice_capture_capture_window")
+public func lattice_capture_capture_window(
+    windowId: UInt64,
+    outImage: UnsafeMutablePointer<lattice_capture_image_out_t>?
+) -> Int32 {
+    bridgeCatch {
+        guard let outImage else {
+            throw BridgeFailure.invalidArgument("out_image is null")
+        }
+        if #available(macOS 14.0, *) {
+            let captured = try runCaptureBlocking {
+                try await ScreenCaptureSession.captureWindow(windowId: windowId)
             }
             try writeImage(captured, into: outImage)
             return BridgeErrorCode.ok.rawValue
@@ -122,6 +176,26 @@ public func lattice_capture_select_interactive_region(
             height: UInt32(height)
         )
         return BridgeErrorCode.ok.rawValue
+    }
+}
+
+@_cdecl("lattice_capture_select_interactive_window")
+public func lattice_capture_select_interactive_window(
+    outWindowId: UnsafeMutablePointer<UInt64>?
+) -> Int32 {
+    bridgeCatch {
+        guard let outWindowId else {
+            throw BridgeFailure.invalidArgument("out_window_id is null")
+        }
+        if #available(macOS 14.0, *) {
+            let windowId = try WindowSelectorOverlay.selectWindow()
+            guard windowId > 0 else {
+                throw BridgeFailure.cancelled
+            }
+            outWindowId.pointee = windowId
+            return BridgeErrorCode.ok.rawValue
+        }
+        throw BridgeFailure.unsupported("ScreenCaptureKit requires macOS 14+")
     }
 }
 
@@ -213,4 +287,23 @@ private func writeImage(
         png_bytes: buffer,
         png_len: UInt32(count)
     )
+}
+
+@available(macOS 14.0, *)
+private func writeWindowInfo(
+    _ window: ScreenCaptureSession.WindowInfo,
+    into info: inout lattice_capture_window_info_t
+) {
+    info.window_id = window.windowID
+    info.width = window.width
+    info.height = window.height
+    withUnsafeMutableBytes(of: &info.title) { buffer in
+        buffer.initializeMemory(as: UInt8.self, repeating: 0)
+        let bytes = window.title.utf8.prefix(max(buffer.count, 1) - 1)
+        var offset = 0
+        for byte in bytes {
+            buffer.storeBytes(of: byte, toByteOffset: offset, as: UInt8.self)
+            offset += 1
+        }
+    }
 }

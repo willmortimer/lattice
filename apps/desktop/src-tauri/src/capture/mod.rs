@@ -1,8 +1,9 @@
 //! Native screen capture → Capture Inbox ingest (feature `capture`).
 //!
 //! Manual smoke: build/run desktop with `--features capture`, then press
-//! **Ctrl+Shift+2** (Windows) or **⌘⇧2** (macOS), or choose **Screen Clip** from
-//! the menu/tray. macOS: grant Screen Recording in System Settings. Windows: WGC via
+//! **Ctrl+Shift+2** (Windows) or **⌘⇧2** (macOS) for interactive region, choose
+//! **Screen Clip** from the menu/tray, or on macOS **Capture Window** for
+//! click-to-target. macOS: grant Screen Recording in System Settings. Windows: WGC via
 //! `lattice-capture-windows` (Graphics capture privacy when applicable).
 
 pub mod platform;
@@ -67,7 +68,7 @@ pub fn install_global_shortcut(app: &AppHandle) -> Result<(), String> {
 pub fn start_screen_clip(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
-        if let Err(message) = run_screen_clip(&app) {
+        if let Err(message) = run_capture_command(&app, capture_image) {
             eprintln!("lattice: screen clip failed: {message}");
             let _ = app.emit(
                 CAPTURE_ERROR_EVENT,
@@ -79,8 +80,27 @@ pub fn start_screen_clip(app: &AppHandle) {
     });
 }
 
-fn run_screen_clip(app: &AppHandle) -> Result<(), String> {
-    match run_screen_clip_inner(app) {
+/// Capture a specific window (macOS click-to-target), then ingest like Screen Clip.
+pub fn start_window_clip(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if let Err(message) = run_capture_command(&app, capture_window_image) {
+            eprintln!("lattice: window clip failed: {message}");
+            let _ = app.emit(
+                CAPTURE_ERROR_EVENT,
+                CaptureErrorPayload {
+                    message: message.clone(),
+                },
+            );
+        }
+    });
+}
+
+fn run_capture_command<F>(app: &AppHandle, capture: F) -> Result<(), String>
+where
+    F: FnOnce(&PlatformCaptureBackend) -> Result<CapturedImage, String>,
+{
+    match run_capture_inner(app, capture) {
         Ok(()) => Ok(()),
         Err(message) if message == CAPTURE_CANCELLED => {
             let _ = app.emit(CAPTURE_CANCELLED_EVENT, ());
@@ -90,18 +110,17 @@ fn run_screen_clip(app: &AppHandle) -> Result<(), String> {
     }
 }
 
-fn run_screen_clip_inner(app: &AppHandle) -> Result<(), String> {
+fn run_capture_inner<F>(app: &AppHandle, capture: F) -> Result<(), String>
+where
+    F: FnOnce(&PlatformCaptureBackend) -> Result<CapturedImage, String>,
+{
     let root = crate::workspace_root::resolve_workspace_root(app)
         .ok_or_else(|| "open a workspace before capturing".to_string())?;
     let inbox_directory = capture_inbox_directory(&root)?;
     let backend = PlatformCaptureBackend::new();
-    let captured = capture_image(&backend)?;
+    let captured = capture(&backend)?;
     let png_bytes = png_bytes_from_capture(&captured)?;
-    let result = ingest_captured_image(
-        root.clone(),
-        &captured,
-        Some(inbox_directory.clone()),
-    )?;
+    let result = ingest_captured_image(root.clone(), &captured, Some(inbox_directory.clone()))?;
     let page_path = result.page_path.clone();
     let workspace_root = root.clone();
     let destination_directory = inbox_directory;
@@ -200,7 +219,34 @@ fn capture_image(backend: &impl CaptureBackend) -> Result<CapturedImage, String>
             source: primary.source,
             destination: CaptureDestination::CaptureInbox,
         })
-        .map_err(|err| err.to_string())
+        .map_err(map_capture_error)
+}
+
+fn capture_window_image(backend: &PlatformCaptureBackend) -> Result<CapturedImage, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let handle = backend
+            .select_interactive_window()
+            .map_err(map_capture_error)?;
+        backend
+            .screenshot(ScreenshotPlan {
+                source: CaptureSource::Window(handle),
+                destination: CaptureDestination::CaptureInbox,
+            })
+            .map_err(map_capture_error)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = backend;
+        Err("window capture is not supported on this platform".to_string())
+    }
+}
+
+fn map_capture_error(err: CaptureError) -> String {
+    match err {
+        CaptureError::Cancelled => CAPTURE_CANCELLED.to_string(),
+        other => other.to_string(),
+    }
 }
 
 fn copy_png_to_clipboard(png_bytes: &[u8]) -> Result<(), String> {
@@ -227,5 +273,37 @@ mod tests {
     fn shortcut_constant_is_stable() {
         assert_eq!(SCREEN_CLIP_SHORTCUT, "CommandOrControl+Shift+2");
         assert_eq!(CAPTURE_INGESTED_EVENT, "capture-ingested");
+    }
+
+    #[test]
+    fn cancelled_capture_maps_to_sentinel() {
+        assert_eq!(
+            map_capture_error(CaptureError::Cancelled),
+            CAPTURE_CANCELLED
+        );
+        assert!(map_capture_error(CaptureError::internal("boom")).contains("boom"));
+    }
+
+    #[test]
+    fn primary_display_is_preferred_over_window_rows() {
+        let displays = [
+            lattice_capture_core::CaptureSourceInfo {
+                source: CaptureSource::Window(lattice_capture_core::WindowHandle(9)),
+                title: Some("Notes".into()),
+                width: Some(800),
+                height: Some(600),
+            },
+            lattice_capture_core::CaptureSourceInfo {
+                source: CaptureSource::Display(lattice_capture_core::DisplayHandle(1)),
+                title: Some("Display 1".into()),
+                width: Some(1920),
+                height: Some(1080),
+            },
+        ];
+        let primary = displays
+            .into_iter()
+            .find(|info| matches!(info.source, CaptureSource::Display(_)))
+            .expect("display row");
+        assert!(matches!(primary.source, CaptureSource::Display(_)));
     }
 }

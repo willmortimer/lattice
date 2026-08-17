@@ -56,6 +56,12 @@ Interactive overlay (`lattice_capture_select_interactive_region`) and live
 ScreenCaptureKit GUI flows are **manual** tests. Rust composes select → fixed
 region capture so encode/ingest stay outside Swift.
 
+Window capture (`lattice_capture_enumerate_windows`,
+`lattice_capture_capture_window`, `lattice_capture_select_interactive_window`)
+follows the same split: Swift enumerates/selects/captures PNG bytes; Rust
+ingests into Capture Inbox. The desktop **Capture Window** menu/tray action
+runs click-to-target then ingest. **⌘⇧2** remains interactive region.
+
 ## Out of scope
 
 - Tauri shortcut / desktop wiring (Task `t3`)

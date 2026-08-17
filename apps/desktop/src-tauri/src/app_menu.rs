@@ -22,6 +22,7 @@ pub const ACTION_SEARCH: &str = "app.search";
 pub const ACTION_COMMAND_PALETTE: &str = "app.command-palette";
 pub const ACTION_QUICK_NOTE: &str = "app.quick-note";
 pub const ACTION_SCREEN_CLIP: &str = "app.screen-clip";
+pub const ACTION_CAPTURE_WINDOW: &str = "app.capture-window";
 pub const ACTION_CAPTURE_SHELF: &str = "app.capture-shelf";
 pub const ACTION_NEW_PAGE: &str = "app.new-page";
 pub const ACTION_NEW_TABLE: &str = "app.new-table";
@@ -102,6 +103,12 @@ pub fn handle_action(app: &AppHandle, id: &str) {
             crate::capture::start_screen_clip(app);
             #[cfg(not(feature = "capture"))]
             eprintln!("lattice: screen clip requires the capture feature");
+        }
+        ACTION_CAPTURE_WINDOW => {
+            #[cfg(all(feature = "capture", target_os = "macos"))]
+            crate::capture::start_window_clip(app);
+            #[cfg(not(all(feature = "capture", target_os = "macos")))]
+            eprintln!("lattice: window capture requires the macOS capture feature");
         }
         ACTION_CAPTURE_SHELF => {
             #[cfg(feature = "capture")]
@@ -195,6 +202,14 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         Some("CmdOrCtrl+Shift+2"),
     )?;
+    #[cfg(target_os = "macos")]
+    let capture_window = MenuItem::with_id(
+        app,
+        ACTION_CAPTURE_WINDOW,
+        "Capture Window",
+        true,
+        None::<&str>,
+    )?;
     let new_page = MenuItem::with_id(
         app,
         ACTION_NEW_PAGE,
@@ -226,13 +241,8 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     )?;
     let home = MenuItem::with_id(app, ACTION_HOME, "Home", true, None::<&str>)?;
     let files = MenuItem::with_id(app, ACTION_FILES, "Files", true, None::<&str>)?;
-    let help_workspace_tour = MenuItem::with_id(
-        app,
-        ACTION_SHELL_TOUR,
-        "Workspace Tour",
-        true,
-        None::<&str>,
-    )?;
+    let help_workspace_tour =
+        MenuItem::with_id(app, ACTION_SHELL_TOUR, "Workspace Tour", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, ACTION_QUIT, "Quit Lattice", true, Some("CmdOrCtrl+Q"))?;
 
     let file_sep1 = PredefinedMenuItem::separator(app)?;
@@ -289,6 +299,7 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &new_page,
             &quick_note,
             &screen_clip,
+            &capture_window,
             &new_table,
             &file_sep1,
             &new_workspace,
@@ -423,7 +434,15 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     #[cfg(all(target_os = "macos", debug_assertions))]
     let menu = Menu::with_items(
         app,
-        &[&app_submenu, &file, &edit, &view, &window, &help, &developer],
+        &[
+            &app_submenu,
+            &file,
+            &edit,
+            &view,
+            &window,
+            &help,
+            &developer,
+        ],
     )?;
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let menu = Menu::with_items(app, &[&app_submenu, &file, &edit, &view, &window, &help])?;
@@ -454,6 +473,14 @@ pub fn build_tray_menu(
         "Screen Clip",
         true,
         Some("CmdOrCtrl+Shift+2"),
+    )?;
+    #[cfg(target_os = "macos")]
+    let capture_window = MenuItem::with_id(
+        app,
+        ACTION_CAPTURE_WINDOW,
+        "Capture Window",
+        true,
+        None::<&str>,
     )?;
     #[cfg(feature = "capture")]
     let capture_shelf = {
@@ -550,11 +577,10 @@ pub fn build_tray_menu(
         }
     }
 
-    let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![
-        &show,
-        &quick_note,
-        &screen_clip,
-    ];
+    let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
+        vec![&show, &quick_note, &screen_clip];
+    #[cfg(target_os = "macos")]
+    items.push(&capture_window);
     #[cfg(feature = "capture")]
     items.push(&capture_shelf);
     items.extend([
@@ -596,6 +622,8 @@ mod tests {
         assert_eq!(ACTION_SETTINGS, "app.settings");
         assert_eq!(ACTION_SEARCH, "app.search");
         assert_eq!(ACTION_QUIT, "app.quit");
+        assert_eq!(ACTION_SCREEN_CLIP, "app.screen-clip");
+        assert_eq!(ACTION_CAPTURE_WINDOW, "app.capture-window");
         assert_eq!(MENU_ACTION_EVENT, "lattice-menu-action");
     }
 }

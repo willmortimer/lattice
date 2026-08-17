@@ -39,7 +39,14 @@ mod tests {
     fn swift_package_path_exists() {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         assert!(manifest_dir.join("swift/Package.swift").is_file());
-        assert!(manifest_dir.join("include/lattice_capture_bridge.h").is_file());
+        assert!(manifest_dir
+            .join("include/lattice_capture_bridge.h")
+            .is_file());
+        let header = std::fs::read_to_string(manifest_dir.join("include/lattice_capture_bridge.h"))
+            .expect("read capture bridge header");
+        assert!(header.contains("lattice_capture_enumerate_windows"));
+        assert!(header.contains("lattice_capture_capture_window"));
+        assert!(header.contains("lattice_capture_select_interactive_window"));
     }
 
     #[test]

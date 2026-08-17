@@ -22,6 +22,16 @@ enum ScreenCaptureSession {
         let height: UInt32
     }
 
+    /// Sendable window metadata (SCWindow itself is not Sendable).
+    struct WindowInfo: Sendable {
+        let windowID: UInt64
+        let title: String
+        let width: UInt32
+        let height: UInt32
+        /// Cocoa global coordinates (bottom-left origin) for click-to-target.
+        let cocoaFrame: CGRect
+    }
+
     static func enumerateDisplays() async throws -> [DisplayInfo] {
         let content = try await SCShareableContent.excludingDesktopWindows(
             false,
@@ -34,6 +44,43 @@ enum ScreenCaptureSession {
                 height: UInt32(display.height)
             )
         }
+    }
+
+    static func enumerateWindows() async throws -> [WindowInfo] {
+        let content = try await loadShareableContent()
+        let excludedPids = Set(latticeExcludedApplications(from: content).map(\.processID))
+        let cocoaFrames = cocoaFramesByWindowID()
+        let zIndex = windowZOrderIndex()
+
+        var rows: [WindowInfo] = []
+        for window in content.windows {
+            guard window.isOnScreen, window.windowLayer == 0 else { continue }
+            if let app = window.owningApplication, excludedPids.contains(app.processID) {
+                continue
+            }
+            let title = windowDisplayTitle(window)
+            guard !title.isEmpty else { continue }
+            let quartz = window.frame
+            guard quartz.width >= 2, quartz.height >= 2 else { continue }
+            let windowID = UInt64(window.windowID)
+            let cocoaFrame = cocoaFrames[windowID] ?? quartzRectToCocoa(quartz)
+            rows.append(
+                WindowInfo(
+                    windowID: windowID,
+                    title: title,
+                    width: UInt32(quartz.width.rounded(.towardZero)),
+                    height: UInt32(quartz.height.rounded(.towardZero)),
+                    cocoaFrame: cocoaFrame
+                )
+            )
+        }
+
+        rows.sort { lhs, rhs in
+            let left = zIndex[lhs.windowID] ?? Int.max
+            let right = zIndex[rhs.windowID] ?? Int.max
+            return left < right
+        }
+        return rows
     }
 
     static func captureDisplay(displayId: UInt32) async throws -> CapturedPng {
@@ -60,6 +107,21 @@ enum ScreenCaptureSession {
         return try await capture(filter: filter, configuration: configuration)
     }
 
+    static func captureWindow(windowId: UInt64) async throws -> CapturedPng {
+        let content = try await loadShareableContent()
+        guard let window = content.windows.first(where: { UInt64($0.windowID) == windowId }) else {
+            throw BridgeFailure.notFound("Window \(windowId) not found")
+        }
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let configuration = SCStreamConfiguration()
+        let scale = CGFloat(filter.pointPixelScale)
+        let rect = filter.contentRect
+        configuration.width = max(Int((rect.width * scale).rounded()), 1)
+        configuration.height = max(Int((rect.height * scale).rounded()), 1)
+        configuration.showsCursor = false
+        return try await capture(filter: filter, configuration: configuration)
+    }
+
     private static func loadShareableContent() async throws -> SCShareableContent {
         try await SCShareableContent.excludingDesktopWindows(
             false,
@@ -79,6 +141,62 @@ enum ScreenCaptureSession {
             }
             return app.processID == pid
         }
+    }
+
+    private static func windowDisplayTitle(_ window: SCWindow) -> String {
+        let title = window.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !title.isEmpty {
+            return title
+        }
+        return window.owningApplication?.applicationName.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? ""
+    }
+
+    /// Quartz window bounds (`kCGWindowBounds`) converted to Cocoa global rects.
+    private static func cocoaFramesByWindowID() -> [UInt64: CGRect] {
+        guard let list = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else {
+            return [:]
+        }
+        var frames: [UInt64: CGRect] = [:]
+        for entry in list {
+            guard let number = entry[kCGWindowNumber as String] as? NSNumber else { continue }
+            guard let bounds = entry[kCGWindowBounds as String] as? [String: Any],
+                  let quartz = CGRect(dictionaryRepresentation: bounds as CFDictionary)
+            else {
+                continue
+            }
+            frames[number.uint64Value] = quartzRectToCocoa(quartz)
+        }
+        return frames
+    }
+
+    /// Front-to-back z-order from CoreGraphics (lower index is closer to front).
+    private static func windowZOrderIndex() -> [UInt64: Int] {
+        guard let list = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else {
+            return [:]
+        }
+        var index: [UInt64: Int] = [:]
+        for (position, entry) in list.enumerated() {
+            guard let number = entry[kCGWindowNumber as String] as? NSNumber else { continue }
+            index[number.uint64Value] = position
+        }
+        return index
+    }
+
+    private static func quartzRectToCocoa(_ quartz: CGRect) -> CGRect {
+        let mainHeight = CGDisplayBounds(CGMainDisplayID()).height
+        return CGRect(
+            x: quartz.origin.x,
+            y: mainHeight - quartz.origin.y - quartz.height,
+            width: quartz.width,
+            height: quartz.height
+        )
     }
 
     private static func contentFilter(

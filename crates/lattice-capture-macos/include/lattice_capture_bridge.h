@@ -37,6 +37,16 @@ typedef struct lattice_capture_display_info {
     uint32_t height;
 } lattice_capture_display_info_t;
 
+/** UTF-8 window title capacity (NUL-terminated). */
+#define LATTICE_CAPTURE_WINDOW_TITLE_MAX 256u
+
+typedef struct lattice_capture_window_info {
+    uint64_t window_id;
+    uint32_t width;
+    uint32_t height;
+    uint8_t title[LATTICE_CAPTURE_WINDOW_TITLE_MAX];
+} lattice_capture_window_info_t;
+
 typedef struct lattice_capture_image_out {
     uint32_t width;
     uint32_t height;
@@ -68,11 +78,31 @@ int32_t lattice_capture_enumerate_displays(
 );
 
 /**
+ * Enumerate on-screen titled windows. Writes up to `out_capacity` rows into
+ * `out` and sets `*out_count` to the number written. `window_id` is
+ * `CGWindowID` widened to 64-bit. Titles are UTF-8, NUL-terminated.
+ */
+int32_t lattice_capture_enumerate_windows(
+    lattice_capture_window_info_t *out,
+    uint32_t out_capacity,
+    uint32_t *out_count
+);
+
+/**
  * Capture a full display as PNG via ScreenCaptureKit.
  * `display_id` is `CGDirectDisplayID`.
  */
 int32_t lattice_capture_capture_display(
     uint32_t display_id,
+    lattice_capture_image_out_t *out_image
+);
+
+/**
+ * Capture a specific on-screen window as PNG via ScreenCaptureKit.
+ * `window_id` is `CGWindowID` widened to 64-bit.
+ */
+int32_t lattice_capture_capture_window(
+    uint64_t window_id,
     lattice_capture_image_out_t *out_image
 );
 
@@ -93,6 +123,15 @@ int32_t lattice_capture_capture_region(
 int32_t lattice_capture_select_interactive_region(
     uint32_t *out_display_id,
     lattice_capture_region_t *out_region
+);
+
+/**
+ * Present an interactive AppKit overlay to click-target an on-screen window.
+ * On success writes `CGWindowID` (widened) into `*out_window_id`.
+ * Escape returns `LATTICE_CAPTURE_ERR_CANCELLED`.
+ */
+int32_t lattice_capture_select_interactive_window(
+    uint64_t *out_window_id
 );
 
 /**

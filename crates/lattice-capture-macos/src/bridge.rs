@@ -3,17 +3,19 @@
 #![cfg_attr(not(link_bridge), allow(dead_code))]
 
 use crate::error::BridgeResult;
-#[cfg(not(link_bridge))]
-use lattice_capture_core::CaptureError;
 #[cfg(link_bridge)]
 use crate::error::{ensure_abi_version, map_status};
 #[cfg(link_bridge)]
 use crate::ffi;
-use crate::ffi::{BridgeImage, LatticeCaptureDisplayInfo, LatticeCaptureRegion};
 #[cfg(link_bridge)]
 use crate::ffi::LatticeCaptureImageOut;
+use crate::ffi::{
+    BridgeImage, LatticeCaptureDisplayInfo, LatticeCaptureRegion, LatticeCaptureWindowInfo,
+};
 #[cfg(link_bridge)]
 use crate::LATTICE_CAPTURE_BRIDGE_ABI_VERSION;
+#[cfg(not(link_bridge))]
+use lattice_capture_core::CaptureError;
 
 pub struct NativeBridge;
 
@@ -48,11 +50,7 @@ impl NativeBridge {
         let mut count = 0u32;
         unsafe {
             map_status(
-                ffi::lattice_capture_enumerate_displays(
-                    rows.as_mut_ptr(),
-                    CAPACITY,
-                    &mut count,
-                ),
+                ffi::lattice_capture_enumerate_displays(rows.as_mut_ptr(), CAPACITY, &mut count),
                 "enumerate_displays",
             )?;
         }
@@ -62,6 +60,35 @@ impl NativeBridge {
 
     #[cfg(not(link_bridge))]
     pub fn enumerate_displays() -> BridgeResult<Vec<LatticeCaptureDisplayInfo>> {
+        Err(CaptureError::Unsupported("bridge not linked".into()))
+    }
+
+    #[cfg(link_bridge)]
+    pub fn enumerate_windows() -> BridgeResult<Vec<LatticeCaptureWindowInfo>> {
+        Self::ensure_linked()?;
+        const CAPACITY: u32 = 256;
+        let mut rows = vec![
+            LatticeCaptureWindowInfo {
+                window_id: 0,
+                width: 0,
+                height: 0,
+                title: [0u8; crate::ffi::LATTICE_CAPTURE_WINDOW_TITLE_MAX],
+            };
+            CAPACITY as usize
+        ];
+        let mut count = 0u32;
+        unsafe {
+            map_status(
+                ffi::lattice_capture_enumerate_windows(rows.as_mut_ptr(), CAPACITY, &mut count),
+                "enumerate_windows",
+            )?;
+        }
+        rows.truncate(count as usize);
+        Ok(rows)
+    }
+
+    #[cfg(not(link_bridge))]
+    pub fn enumerate_windows() -> BridgeResult<Vec<LatticeCaptureWindowInfo>> {
         Err(CaptureError::Unsupported("bridge not linked".into()))
     }
 
@@ -89,7 +116,33 @@ impl NativeBridge {
     }
 
     #[cfg(link_bridge)]
-    pub fn capture_region(display_id: u32, region: LatticeCaptureRegion) -> BridgeResult<BridgeImage> {
+    pub fn capture_window(window_id: u64) -> BridgeResult<BridgeImage> {
+        Self::ensure_linked()?;
+        let mut out = LatticeCaptureImageOut {
+            width: 0,
+            height: 0,
+            png_bytes: std::ptr::null_mut(),
+            png_len: 0,
+        };
+        unsafe {
+            map_status(
+                ffi::lattice_capture_capture_window(window_id, &mut out),
+                "capture_window",
+            )?;
+            Ok(ffi::take_png_image(out))
+        }
+    }
+
+    #[cfg(not(link_bridge))]
+    pub fn capture_window(_window_id: u64) -> BridgeResult<BridgeImage> {
+        Err(CaptureError::Unsupported("bridge not linked".into()))
+    }
+
+    #[cfg(link_bridge)]
+    pub fn capture_region(
+        display_id: u32,
+        region: LatticeCaptureRegion,
+    ) -> BridgeResult<BridgeImage> {
         Self::ensure_linked()?;
         let mut out = LatticeCaptureImageOut {
             width: 0,
@@ -138,6 +191,27 @@ impl NativeBridge {
 
     #[cfg(not(link_bridge))]
     pub fn select_interactive_region() -> BridgeResult<(u32, LatticeCaptureRegion)> {
+        Err(CaptureError::Unsupported("bridge not linked".into()))
+    }
+
+    /// Present the AppKit overlay and return the clicked window id.
+    ///
+    /// Encode/ingest stay in Rust; this only performs interactive selection.
+    #[cfg(link_bridge)]
+    pub fn select_interactive_window() -> BridgeResult<u64> {
+        Self::ensure_linked()?;
+        let mut window_id = 0u64;
+        unsafe {
+            map_status(
+                ffi::lattice_capture_select_interactive_window(&mut window_id),
+                "select_interactive_window",
+            )?;
+        }
+        Ok(window_id)
+    }
+
+    #[cfg(not(link_bridge))]
+    pub fn select_interactive_window() -> BridgeResult<u64> {
         Err(CaptureError::Unsupported("bridge not linked".into()))
     }
 

@@ -19,6 +19,8 @@ pub const LATTICE_CAPTURE_PERM_AUTHORIZED: u32 = 2;
 pub const LATTICE_CAPTURE_PERM_DENIED: u32 = 3;
 pub const LATTICE_CAPTURE_PERM_RESTRICTED: u32 = 4;
 
+pub const LATTICE_CAPTURE_WINDOW_TITLE_MAX: usize = 256;
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct LatticeCapturePermissionStatus {
@@ -51,6 +53,35 @@ pub struct LatticeCaptureRegion {
     pub height: u32,
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct LatticeCaptureWindowInfo {
+    pub window_id: u64,
+    pub width: u32,
+    pub height: u32,
+    pub title: [u8; LATTICE_CAPTURE_WINDOW_TITLE_MAX],
+}
+
+impl LatticeCaptureWindowInfo {
+    /// UTF-8 title copied from the C ABI buffer (NUL-terminated).
+    pub fn title_string(&self) -> Option<String> {
+        title_from_c_bytes(&self.title)
+    }
+}
+
+/// Decode a NUL-terminated UTF-8 title from a fixed C ABI buffer.
+pub fn title_from_c_bytes(bytes: &[u8]) -> Option<String> {
+    let end = bytes
+        .iter()
+        .position(|&byte| byte == 0)
+        .unwrap_or(bytes.len());
+    let slice = &bytes[..end];
+    if slice.is_empty() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(slice).into_owned())
+}
+
 #[cfg(link_bridge)]
 #[link(name = "LatticeCaptureBridge", kind = "dylib")]
 extern "C" {
@@ -62,8 +93,19 @@ extern "C" {
         out_count: *mut u32,
     ) -> i32;
 
+    pub fn lattice_capture_enumerate_windows(
+        out: *mut LatticeCaptureWindowInfo,
+        out_capacity: u32,
+        out_count: *mut u32,
+    ) -> i32;
+
     pub fn lattice_capture_capture_display(
         display_id: u32,
+        out_image: *mut LatticeCaptureImageOut,
+    ) -> i32;
+
+    pub fn lattice_capture_capture_window(
+        window_id: u64,
         out_image: *mut LatticeCaptureImageOut,
     ) -> i32;
 
@@ -78,8 +120,11 @@ extern "C" {
         out_region: *mut LatticeCaptureRegion,
     ) -> i32;
 
-    pub fn lattice_capture_capture_interactive_region(out_image: *mut LatticeCaptureImageOut)
-        -> i32;
+    pub fn lattice_capture_select_interactive_window(out_window_id: *mut u64) -> i32;
+
+    pub fn lattice_capture_capture_interactive_region(
+        out_image: *mut LatticeCaptureImageOut,
+    ) -> i32;
 
     pub fn lattice_capture_image_release(image: *mut LatticeCaptureImageOut);
 

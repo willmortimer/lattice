@@ -11,6 +11,8 @@ fn main() {
     println!("cargo:rerun-if-env-changed=LATTICE_CAPTURE_BRIDGE_LIB");
     println!("cargo:rerun-if-changed=swift/Package.swift");
     println!("cargo:rerun-if-changed=include/lattice_capture_bridge.h");
+    println!("cargo:rerun-if-changed=swift/Sources/LatticeCaptureBridge");
+    println!("cargo:rerun-if-changed=swift/Sources/LatticeCaptureBridgeC/include/lattice_capture_bridge.h");
 
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os != "macos" {
