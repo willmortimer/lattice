@@ -31,7 +31,10 @@ import {
 } from "react";
 
 import {
+  archiveAgentThread,
+  deleteAgentThread,
   displayTitleForThread,
+  renameAgentThread,
   type AgentThreadSummary,
 } from "../lib/agentThreads";
 import { formatAbsoluteTime, formatRelativeTime } from "../lib/relativeTime";
@@ -44,6 +47,11 @@ import { useAgentRunActiveQuery } from "../query/useAgentRunStatusQuery";
 import { useWorkspaceCatalogQuery } from "../query/useWorkspaceCatalog";
 import { useAgentChatControls } from "./agentChatControls";
 import { useAgentSessionStore } from "./agentStore";
+import {
+  normalizeRenameInput,
+  selectionAfterThreadRemoval,
+  shouldProceedWithDelete,
+} from "./agentThreadHistoryActions";
 import { sortThreadsWithPins } from "./agentThreadPins";
 import "./agentThreadHistory.css";
 
@@ -83,6 +91,9 @@ type AgentThreadRowProps = {
   disabled: boolean;
   onSelect: () => void;
   onTogglePin: () => void;
+  onRename: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
   onFocusRow: () => void;
 };
 
@@ -95,6 +106,9 @@ function AgentThreadRow({
   disabled,
   onSelect,
   onTogglePin,
+  onRename,
+  onArchive,
+  onDelete,
   onFocusRow,
 }: AgentThreadRowProps) {
   const title = displayTitleForThread(thread);
@@ -157,7 +171,13 @@ function AgentThreadRow({
         <MenuPortal>
           <MenuPositioner sideOffset={4} align="end">
             <MenuPopup className="ltui-menu agent-thread-browser-actions-menu">
-              <MenuItem className="ltui-menu-item" disabled>
+              <MenuItem
+                className="ltui-menu-item"
+                disabled={disabled}
+                onClick={() => {
+                  onRename();
+                }}
+              >
                 <PencilSimple size={14} />
                 Rename…
               </MenuItem>
@@ -171,12 +191,24 @@ function AgentThreadRow({
                 <PushPin size={14} weight={pinned ? "fill" : "regular"} />
                 {pinned ? "Unpin" : "Pin"}
               </MenuItem>
-              <MenuItem className="ltui-menu-item" disabled>
+              <MenuItem
+                className="ltui-menu-item"
+                disabled={disabled}
+                onClick={() => {
+                  onArchive();
+                }}
+              >
                 <Archive size={14} />
                 Archive
               </MenuItem>
               <MenuSeparator />
-              <MenuItem className="ltui-menu-item" disabled>
+              <MenuItem
+                className="ltui-menu-item"
+                disabled={disabled}
+                onClick={() => {
+                  onDelete();
+                }}
+              >
                 <Trash size={14} />
                 Delete
               </MenuItem>
@@ -193,6 +225,7 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [focusIndex, setFocusIndex] = useState(0);
+  const [actionError, setActionError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const threadId = useAgentSessionStore((state) => state.threadIds[workspaceRoot] ?? "");
@@ -273,6 +306,102 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
   });
 
   const interactionsDisabled = isStreaming;
+
+  const applySelectionAfterRemoval = useCallback(
+    (removedThreadId: string) => {
+      const remainingThreadIds = visibleThreads.map((thread) => thread.id);
+      const nextSelection = selectionAfterThreadRemoval(
+        removedThreadId,
+        threadId,
+        remainingThreadIds,
+      );
+      switch (nextSelection.kind) {
+        case "unchanged":
+          return;
+        case "select":
+          selectThreadId(workspaceRoot, nextSelection.threadId);
+          return;
+        case "new":
+          startNewThread(workspaceRoot);
+          return;
+        default: {
+          const _exhaustive: never = nextSelection;
+          return _exhaustive;
+        }
+      }
+    },
+    [selectThreadId, startNewThread, threadId, visibleThreads, workspaceRoot],
+  );
+
+  const handleRenameThread = useCallback(
+    async (thread: AgentThreadSummary) => {
+      if (interactionsDisabled) {
+        return;
+      }
+      const currentTitle = displayTitleForThread(thread);
+      const nextTitle = normalizeRenameInput(
+        window.prompt("Rename thread", currentTitle),
+      );
+      if (!nextTitle || nextTitle === currentTitle) {
+        return;
+      }
+      setActionError(null);
+      try {
+        await renameAgentThread({
+          workspaceRoot,
+          threadId: thread.id,
+          title: nextTitle,
+        });
+        await invalidateAgentThreads(queryClient, workspaceRoot);
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [interactionsDisabled, queryClient, workspaceRoot],
+  );
+
+  const handleArchiveThread = useCallback(
+    async (thread: AgentThreadSummary) => {
+      if (interactionsDisabled) {
+        return;
+      }
+      setActionError(null);
+      try {
+        await archiveAgentThread({
+          workspaceRoot,
+          threadId: thread.id,
+        });
+        applySelectionAfterRemoval(thread.id);
+        await invalidateAgentThreads(queryClient, workspaceRoot);
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [applySelectionAfterRemoval, interactionsDisabled, queryClient, workspaceRoot],
+  );
+
+  const handleDeleteThread = useCallback(
+    async (thread: AgentThreadSummary) => {
+      if (interactionsDisabled) {
+        return;
+      }
+      if (!shouldProceedWithDelete()) {
+        return;
+      }
+      setActionError(null);
+      try {
+        await deleteAgentThread({
+          workspaceRoot,
+          threadId: thread.id,
+        });
+        applySelectionAfterRemoval(thread.id);
+        await invalidateAgentThreads(queryClient, workspaceRoot);
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [applySelectionAfterRemoval, interactionsDisabled, queryClient, workspaceRoot],
+  );
 
   const moveFocus = useCallback(
     (nextIndex: number) => {
@@ -428,6 +557,15 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
                     onTogglePin={() => {
                       togglePinnedThread(workspaceRoot, thread.id);
                     }}
+                    onRename={() => {
+                      void handleRenameThread(thread);
+                    }}
+                    onArchive={() => {
+                      void handleArchiveThread(thread);
+                    }}
+                    onDelete={() => {
+                      void handleDeleteThread(thread);
+                    }}
                     onFocusRow={() => {
                       setFocusIndex(item.index);
                     }}
@@ -442,6 +580,11 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
       {loadError ? (
         <p className="agent-thread-browser-error" role="status">
           History unavailable
+        </p>
+      ) : null}
+      {actionError ? (
+        <p className="agent-thread-browser-error" role="status">
+          {actionError}
         </p>
       ) : null}
       {isFetching && !loadError ? (
