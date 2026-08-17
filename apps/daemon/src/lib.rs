@@ -24,6 +24,7 @@ mod idle;
 pub mod jobs;
 mod lease;
 pub mod mcp;
+pub mod mcp_client_config;
 mod preferences;
 mod resource_api;
 mod tool_executor;

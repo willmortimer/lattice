@@ -188,15 +188,42 @@ Proposal tools: `create_proposal`, `list_proposals`, `get_proposal`,
 `propose_page`, `propose_resource`, `propose_workflow`, `propose_interface`,
 `propose_artifact`. These persist reviewable bundles only — they do not apply
 mutations. Prefer the HTTP contract for automated tests; use MCP when wiring
-Claude Desktop / other stdio clients.
+Cursor, Claude Desktop, or other stdio MCP clients.
 
-Example Claude Desktop snippet:
+This is **stdio install wiring**, not a packaged connector from the Claude
+Desktop extension store or a DXT/mcpb bundle.
+
+### Client config (`--print-client-config`)
+
+Print a ready-to-paste `mcpServers` block with the absolute path of the
+`latticed` binary you invoked:
+
+```sh
+latticed mcp --print-client-config --client cursor
+latticed mcp --print-client-config --client claude-desktop
+```
+
+`--client` is required with `--print-client-config` (`cursor` or
+`claude-desktop`). Unknown clients exit non-zero. The command prints JSON to
+stdout and does **not** start the stdio MCP server.
+
+If `LATTICE_AUTH_TOKEN` is already set in the process environment, the JSON
+includes an `env` block; otherwise `env` is omitted (no invented tokens).
+
+**Cursor:** merge the output into project `.cursor/mcp.json` or Cursor user MCP
+settings (stdio server entry).
+
+**Claude Desktop:** merge into `claude_desktop_config.json` (macOS:
+`~/Library/Application Support/Claude/claude_desktop_config.json`; Windows:
+`%APPDATA%\Claude\claude_desktop_config.json`).
+
+Example output (token present in environment):
 
 ```json
 {
   "mcpServers": {
     "lattice": {
-      "command": "latticed",
+      "command": "/absolute/path/to/latticed",
       "args": ["mcp"],
       "env": { "LATTICE_AUTH_TOKEN": "dev-token" }
     }

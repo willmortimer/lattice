@@ -2,13 +2,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use lattice_daemon::{
-    default_socket_path, mcp, serve_with_shutdown_and_controllers, AgentController,
+    default_socket_path, mcp, mcp_client_config, serve_with_shutdown_and_controllers, AgentController,
     AgentProviderMode, DaemonConfig, DaemonPreferences, SemanticController, SemanticProviderMode,
     VoiceController, VoiceProviderMode, DEFAULT_API_PORT,
 };
 use lattice_runtime::LatticeRuntime;
+use serde_json;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
@@ -48,6 +49,14 @@ struct Cli {
     idle_shutdown_secs: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum McpClientKind {
+    #[value(name = "cursor")]
+    Cursor,
+    #[value(name = "claude-desktop")]
+    ClaudeDesktop,
+}
+
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Serve MCP tools over stdio (search/read/related/build_context).
@@ -55,6 +64,16 @@ enum Commands {
         /// Shared auth token (informational / launcher parity with the HTTP API).
         #[arg(long, env = "LATTICE_AUTH_TOKEN")]
         auth_token: Option<String>,
+
+        /// Print a client-ready `mcpServers` JSON block and exit (no stdio server).
+        #[arg(long)]
+        print_client_config: bool,
+
+        /// MCP client target (`cursor` or `claude-desktop`). Required with
+        /// `--print-client-config`.
+        #[arg(long, requires = "print_client_config")]
+        #[arg(required_if_eq("print_client_config", "true"))]
+        client: Option<McpClientKind>,
     },
 }
 
@@ -69,7 +88,25 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    if let Some(Commands::Mcp { auth_token }) = cli.command {
+    if let Some(Commands::Mcp {
+        auth_token,
+        print_client_config,
+        client,
+    }) = cli.command
+    {
+        if print_client_config {
+            let _client = client.expect("clap requires --client with --print-client-config");
+            let exe = std::env::current_exe().context("resolve current executable path")?;
+            let command_path = exe.to_string_lossy();
+            let env_token = std::env::var("LATTICE_AUTH_TOKEN").ok();
+            let config = mcp_client_config::build_mcp_client_config(
+                &command_path,
+                env_token.as_deref(),
+            );
+            println!("{}", serde_json::to_string_pretty(&config)?);
+            return Ok(());
+        }
+
         let token = auth_token
             .or(cli.auth_token)
             .unwrap_or_else(|| Uuid::now_v7().to_string());

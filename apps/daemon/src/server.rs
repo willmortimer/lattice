@@ -1119,6 +1119,7 @@ fn collab_error_to_wire(err: lattice_collab::Error) -> WireError {
         lattice_collab::Error::Io { .. } => "collab_journal_io_error",
         lattice_collab::Error::RemotePayload { .. } => "collab_remote_payload_error",
         lattice_collab::Error::RemoteConflict { .. } => "collab_remote_conflict",
+        lattice_collab::Error::LogNeedsCompact { .. } => "collab_log_needs_compact",
     };
     WireError {
         code: code.into(),
