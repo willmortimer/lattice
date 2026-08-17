@@ -7,6 +7,14 @@
   background: var(--lt-bg-raise);
 }
 
+.help-panel-activity {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  border-left: none;
+  background: var(--lt-bg);
+}
+
 .help-head {
   display: flex;
   min-height: 52px;

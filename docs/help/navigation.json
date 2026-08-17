@@ -4,13 +4,16 @@
     "items": [
       { "label": "Welcome", "file": "welcome.md" },
       { "label": "Open a workspace", "file": "first-workspace.md" },
-      { "label": "What to click", "file": "what-to-click.md" }
+      { "label": "What to click", "file": "what-to-click.md" },
+      { "label": "Workspace agent", "file": "agent.md" }
     ]
   },
   {
     "label": "Everyday work",
     "items": [
       { "label": "Write a page", "file": "pages.md" },
+      { "label": "Screen capture", "file": "capture.md" },
+      { "label": "Collaborative pages", "file": "collaboration.md" },
       { "label": "Find things", "file": "find-and-jump.md" },
       { "label": "Import a spreadsheet", "file": "import-csv.md" },
       { "label": "Put work on a board", "file": "canvas.md" }

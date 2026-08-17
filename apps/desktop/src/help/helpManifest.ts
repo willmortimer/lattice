@@ -1,6 +1,9 @@
 import navigationJson from "../../../../docs/help/navigation.json";
 
+import agentMd from "../../../../docs/help/agent.md?raw";
 import canvasMd from "../../../../docs/help/canvas.md?raw";
+import captureMd from "../../../../docs/help/capture.md?raw";
+import collaborationMd from "../../../../docs/help/collaboration.md?raw";
 import firstWorkspaceMd from "../../../../docs/help/first-workspace.md?raw";
 import findAndJumpMd from "../../../../docs/help/find-and-jump.md?raw";
 import importCsvMd from "../../../../docs/help/import-csv.md?raw";
@@ -20,7 +23,10 @@ export const HELP_RAW_BY_FILE: Record<string, string> = {
   "welcome.md": welcomeMd,
   "first-workspace.md": firstWorkspaceMd,
   "what-to-click.md": whatToClickMd,
+  "agent.md": agentMd,
   "pages.md": pagesMd,
+  "capture.md": captureMd,
+  "collaboration.md": collaborationMd,
   "find-and-jump.md": findAndJumpMd,
   "import-csv.md": importCsvMd,
   "canvas.md": canvasMd,

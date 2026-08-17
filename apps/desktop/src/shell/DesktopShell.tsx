@@ -133,11 +133,11 @@ export function DesktopShell({ model }: DesktopShellProps) {
     proposalSummaries, proposalInboxLoading, proposalApplyOutcome, proposalReview, refreshProposalInbox, openProposalReview,
     handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
     openProposalResourcePath, dismissProposalApplyOutcome,
-    openTabs, navigation, inspectorOpen, helpOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot,
+    openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings,
     applyDesktopSettings, applyStartupSettings, setError,
     recents, page, setLinkPicker, handleImportEditorAsset,
-    setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen, setHelpOpen, setAgentPanelOpen,
+    setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen, setAgentPanelOpen,
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
     clearRecents, resetSettings, refreshProfile, handleGetStarted, handleOpenWorkspace, openRecent,
     openWorkspaceById, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
@@ -451,6 +451,13 @@ export function DesktopShell({ model }: DesktopShellProps) {
           </IconButton>
           <div className="activity-spacer" />
           <IconButton
+            label="Help"
+            className={activityArea === "help" ? "activity-button-active" : ""}
+            onClick={() => setActivityArea("help")}
+          >
+            <Question size={17} />
+          </IconButton>
+          <IconButton
             label="Settings"
             className={activityArea === "settings" ? "activity-button-active" : ""}
             onClick={() => setActivityArea("settings")}
@@ -734,13 +741,6 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 <Robot size={16} />
               </IconButton>
               <IconButton
-                label={helpOpen ? "Hide help" : "Open help"}
-                className={helpOpen ? "header-button-active" : ""}
-                onClick={() => setHelpOpen((open) => !open)}
-              >
-                <Question size={16} />
-              </IconButton>
-              <IconButton
                 label={inspectorOpen ? "Hide inspector" : "Show inspector"}
                 className={inspectorOpen ? "header-button-active" : ""}
                 onClick={() => setInspectorOpen((open) => !open)}
@@ -868,7 +868,18 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 </Suspense>
               )}
 
-              {activityArea !== "home" && activityArea !== "settings" && (
+              {activityArea === "help" && (
+                <Suspense fallback={<div className="surface-loading">Loading help…</div>}>
+                  <HelpPanel
+                    layout="activity"
+                    deepLinkStem={helpDeepLinkStem}
+                    onDeepLinkConsumed={clearHelpDeepLink}
+                    onClose={() => setActivityArea("files")}
+                  />
+                </Suspense>
+              )}
+
+              {activityArea !== "home" && activityArea !== "settings" && activityArea !== "help" && (
                 session?.kind === "canvas" ? (
                   <div className="canvas-pane">
                     <ResourceSurface
@@ -924,16 +935,6 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 </div>
               )}
             </section>
-
-            {helpOpen && (
-              <Suspense fallback={<div className="surface-loading">Loading help…</div>}>
-                <HelpPanel
-                  deepLinkStem={helpDeepLinkStem}
-                  onDeepLinkConsumed={clearHelpDeepLink}
-                  onClose={() => setHelpOpen(false)}
-                />
-              </Suspense>
-            )}
 
             {inspectorOpen && (
               <ResourceInspector

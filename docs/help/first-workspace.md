@@ -1,7 +1,6 @@
 ---
 title: Open a workspace
 description: Create or open the folder Lattice will use.
-anchor: shell.workspace-switcher
 ---
 
 # Open a workspace
@@ -26,3 +25,7 @@ Write a short page, then open the same folder in Finder. You should see a
 | Create or jump | ⌘/Ctrl+P |
 | Quick note | ⌘/Ctrl+N |
 | Search | ⌘/Ctrl+K |
+| Screen clip to inbox | ⌘⇧2 |
+
+Use the **robot** button on the left rail when you want the workspace agent
+beside your files.

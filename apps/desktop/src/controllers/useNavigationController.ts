@@ -2,7 +2,13 @@ import { useCallback, useRef, useState, type Dispatch, type SetStateAction } fro
 import { remapWorkspacePath } from "../lib/pathRemap";
 import type { Resource } from "../types";
 
-export type ActivityArea = "home" | "files" | "search" | "quick-note" | "settings";
+export type ActivityArea =
+  | "home"
+  | "files"
+  | "search"
+  | "quick-note"
+  | "help"
+  | "settings";
 
 export interface NavigationState {
   paths: string[];

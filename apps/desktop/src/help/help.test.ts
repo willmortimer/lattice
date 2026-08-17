@@ -8,6 +8,7 @@ import {
   filterHelpPages,
   findHelpPageByStem,
   parseHelpNavigation,
+  parseHelpPageRaw,
   stemFromHelpFile,
 } from "./helpCorpus";
 import { parseHelpDeepLinkUrl } from "./helpDeepLink";
@@ -20,13 +21,17 @@ describe("help navigation parse", () => {
     const navigation = parseHelpNavigation(HELP_NAVIGATION);
     expect(navigation.length).toBeGreaterThan(0);
     expect(navigation[0]?.items[0]?.file).toMatch(/\.md$/);
-    expect(CORPUS.pages.length).toBeGreaterThanOrEqual(10);
+    expect(CORPUS.pages.length).toBe(13);
     expect(stemFromHelpFile("find-and-jump.md")).toBe("find-and-jump");
   });
 
-  it("reads anchor frontmatter from find-and-jump", () => {
-    const page = findHelpPageByStem(CORPUS.pages, "find-and-jump");
-    expect(page?.anchor).toBe("shell.search");
+  it("parses optional anchor frontmatter", () => {
+    const page = parseHelpPageRaw(
+      "tour.md",
+      "---\ntitle: Tour\nanchor: shell.search\n---\n\nBody",
+      "Tour",
+    );
+    expect(page.anchor).toBe("shell.search");
   });
 });
 
@@ -34,6 +39,10 @@ describe("help search filter", () => {
   it("filters pages by title and body text", () => {
     const matches = filterHelpPages(CORPUS.pages, "spreadsheet");
     expect(matches.some((page) => page.stem === "import-csv")).toBe(true);
+    const agentMatches = filterHelpPages(CORPUS.pages, "agent");
+    expect(agentMatches.some((page) => page.stem === "agent")).toBe(true);
+    const clipMatches = filterHelpPages(CORPUS.pages, "clip");
+    expect(clipMatches.some((page) => page.stem === "capture")).toBe(true);
     expect(filterHelpPages(CORPUS.pages, "zzzz-not-in-help")).toHaveLength(0);
   });
 });

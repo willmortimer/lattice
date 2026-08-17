@@ -21,12 +21,18 @@ import "./help.css";
 const CORPUS = buildHelpCorpus(HELP_NAVIGATION, HELP_RAW_BY_FILE);
 
 export interface HelpPanelProps {
+  layout?: "panel" | "activity";
   deepLinkStem?: string | null;
   onDeepLinkConsumed?: () => void;
   onClose: () => void;
 }
 
-export function HelpPanel({ deepLinkStem, onDeepLinkConsumed, onClose }: HelpPanelProps) {
+export function HelpPanel({
+  layout = "panel",
+  deepLinkStem,
+  onDeepLinkConsumed,
+  onClose,
+}: HelpPanelProps) {
   const [query, setQuery] = useState("");
   const [selectedStem, setSelectedStem] = useState<string>(
     CORPUS.pages[0]?.stem ?? "welcome",
@@ -111,7 +117,10 @@ export function HelpPanel({ deepLinkStem, onDeepLinkConsumed, onClose }: HelpPan
     filteredPages.some((entry) => entry.stem === page.stem);
 
   return (
-    <aside className="help-panel" aria-label="Help">
+    <aside
+      className={layout === "activity" ? "help-panel help-panel-activity" : "help-panel"}
+      aria-label="Help"
+    >
       <header className="help-head">
         <div>
           <div className="help-eyebrow">Lattice</div>

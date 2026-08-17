@@ -118,8 +118,6 @@ export function useDesktopController() {
   const setSidebarWidth = useDesktopUiStore((state) => state.setSidebarWidth);
   const inspectorOpen = useDesktopUiStore((state) => state.inspectorOpen);
   const setInspectorOpen = useDesktopUiStore((state) => state.setInspectorOpen);
-  const helpOpen = useDesktopUiStore((state) => state.helpOpen);
-  const setHelpOpen = useDesktopUiStore((state) => state.setHelpOpen);
   const agentPanelOpen = useDesktopUiStore((state) => state.agentPanelOpen);
   const setAgentPanelOpen = useDesktopUiStore((state) => state.setAgentPanelOpen);
   const paletteOpen = useDesktopUiStore((state) => state.paletteOpen);
@@ -231,8 +229,8 @@ export function useDesktopController() {
 
   const applyHelpDeepLink = useCallback((stem: string) => {
     setHelpDeepLinkStem(stem);
-    setHelpOpen(true);
-  }, [setHelpOpen]);
+    navigationController.setActivityArea("help");
+  }, [navigationController]);
 
   const clearHelpDeepLink = useCallback(() => {
     setHelpDeepLinkStem(null);
@@ -1237,10 +1235,10 @@ export function useDesktopController() {
     proposalSummaries, proposalInboxLoading, proposalApplyOutcome, proposalReview, refreshProposalInbox, openProposalReview,
     handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
     openProposalResourcePath, dismissProposalApplyOutcome,
-    openTabs, navigation, inspectorOpen, helpOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
+    openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
     paletteItems, hasCapability, setSettings, setStartup, applyDesktopSettings, applyStartupSettings, setError,
-    setSaveStatus: setActiveSaveStatus, setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen,    setActivityArea, setInspectorOpen, setHelpOpen, setAgentPanelOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
+    setSaveStatus: setActiveSaveStatus, setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen,    setActivityArea, setInspectorOpen, setAgentPanelOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
     handleTreeCollapsedPathsChange,
     setLinkPicker,
     setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, refreshProfile, handleGetStarted,

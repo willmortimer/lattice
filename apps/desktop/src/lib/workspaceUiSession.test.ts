@@ -47,7 +47,7 @@ describe("workspaceUiSession", () => {
     expect(
       normalizeWorkspaceUiSession("ws-1", {
         openTabIds: ["a.page", "", "b.page"],
-        activityArea: "files",
+        activityArea: "help",
         inspectorOpen: true,
         agentThreadId: "thread-1",
         paneLayout: { version: 2 },
@@ -57,7 +57,7 @@ describe("workspaceUiSession", () => {
       workspaceId: "ws-1",
       openTabIds: ["a.page", "b.page"],
       activeResourceId: null,
-      activityArea: "files",
+      activityArea: "help",
       inspectorOpen: true,
       agentThreadId: "thread-1",
       paneLayout: { version: 2 },

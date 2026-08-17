@@ -42,6 +42,7 @@ const ACTIVITY_AREAS: readonly ActivityArea[] = [
   "files",
   "search",
   "quick-note",
+  "help",
   "settings",
 ];
 
