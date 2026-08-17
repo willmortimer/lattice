@@ -6,13 +6,14 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use lattice_core::OPERATIONAL_DIR;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 const AGENT_DIR: &str = "agent";
 const THREADS_DB: &str = "threads.sqlite";
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
+const THREAD_COLUMNS: &str = "id, title, created_at, updated_at, archived_at";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +22,7 @@ pub struct ThreadRow {
     pub title: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    pub archived_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,16 +80,19 @@ impl AgentThreadsStore {
         connection.pragma_update(None, "foreign_keys", "ON")?;
         let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
         if version > SCHEMA_VERSION {
-            return Err(ThreadStoreError::Sqlite(rusqlite::Error::InvalidParameterName(
-                format!("unsupported threads schema version {version}"),
-            )));
+            return Err(ThreadStoreError::Sqlite(
+                rusqlite::Error::InvalidParameterName(format!(
+                    "unsupported threads schema version {version}"
+                )),
+            ));
         }
         connection.execute_batch(
             "CREATE TABLE IF NOT EXISTS threads (
                 id TEXT PRIMARY KEY,
                 title TEXT,
                 created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL
+                updated_at INTEGER NOT NULL,
+                archived_at INTEGER
              );
              CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY,
@@ -100,6 +105,9 @@ impl AgentThreadsStore {
              CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON messages(thread_id);",
         )?;
         if version < SCHEMA_VERSION {
+            if !has_column(&connection, "threads", "archived_at")? {
+                connection.execute("ALTER TABLE threads ADD COLUMN archived_at INTEGER", [])?;
+            }
             connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
         Ok(Self { path, connection })
@@ -109,31 +117,33 @@ impl AgentThreadsStore {
         &self.path
     }
 
-    pub fn list_threads(&self) -> Result<Vec<ThreadRow>> {
-        let mut statement = self
-            .connection
-            .prepare("SELECT id, title, created_at, updated_at FROM threads ORDER BY updated_at DESC")?;
+    pub fn list_threads(&self, include_archived: bool) -> Result<Vec<ThreadRow>> {
+        let sql = if include_archived {
+            format!("SELECT {THREAD_COLUMNS} FROM threads ORDER BY updated_at DESC")
+        } else {
+            format!(
+                "SELECT {THREAD_COLUMNS} FROM threads WHERE archived_at IS NULL ORDER BY updated_at DESC"
+            )
+        };
+        let mut statement = self.connection.prepare(&sql)?;
         let rows = statement
-            .query_map([], |row| {
-                Ok(ThreadRow {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    created_at: row.get(2)?,
-                    updated_at: row.get(3)?,
-                })
-            })?
+            .query_map([], map_thread_row)?
             .collect::<std::result::Result<Vec<_>, rusqlite::Error>>()?;
         Ok(rows)
     }
 
-    pub fn create_thread(&mut self, id: Option<String>, title: Option<String>) -> Result<ThreadRow> {
+    pub fn create_thread(
+        &mut self,
+        id: Option<String>,
+        title: Option<String>,
+    ) -> Result<ThreadRow> {
         let thread_id = id
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| Uuid::new_v4().to_string());
         let title = title.filter(|value| !value.trim().is_empty());
         let now = current_time_ms();
         self.connection.execute(
-            "INSERT INTO threads(id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO threads(id, title, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, ?4, NULL)",
             params![thread_id, title, now, now],
         )?;
         Ok(ThreadRow {
@@ -141,35 +151,65 @@ impl AgentThreadsStore {
             title,
             created_at: now,
             updated_at: now,
+            archived_at: None,
         })
     }
 
     pub fn get_thread(&self, thread_id: &str) -> Result<Option<ThreadRow>> {
+        let sql = format!("SELECT {THREAD_COLUMNS} FROM threads WHERE id = ?1");
         let row = self
             .connection
-            .query_row(
-                "SELECT id, title, created_at, updated_at FROM threads WHERE id = ?1",
-                params![thread_id],
-                |row| {
-                    Ok(ThreadRow {
-                        id: row.get(0)?,
-                        title: row.get(1)?,
-                        created_at: row.get(2)?,
-                        updated_at: row.get(3)?,
-                    })
-                },
-            )
+            .query_row(&sql, params![thread_id], map_thread_row)
             .optional()?;
         Ok(row)
     }
 
+    pub fn rename_thread(&mut self, thread_id: &str, title: Option<String>) -> Result<ThreadRow> {
+        self.require_thread(thread_id)?;
+        let title = title.filter(|value| !value.trim().is_empty());
+        let now = current_time_ms();
+        self.connection.execute(
+            "UPDATE threads SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            params![title, now, thread_id],
+        )?;
+        self.require_thread(thread_id)
+    }
+
+    pub fn archive_thread(&mut self, thread_id: &str) -> Result<ThreadRow> {
+        self.set_archived_at(thread_id, Some(current_time_ms()))
+    }
+
+    pub fn unarchive_thread(&mut self, thread_id: &str) -> Result<ThreadRow> {
+        self.set_archived_at(thread_id, None)
+    }
+
+    pub fn delete_thread(&mut self, thread_id: &str) -> Result<()> {
+        self.require_thread(thread_id)?;
+        self.connection
+            .execute("DELETE FROM threads WHERE id = ?1", params![thread_id])?;
+        Ok(())
+    }
+
+    fn set_archived_at(&mut self, thread_id: &str, archived_at: Option<i64>) -> Result<ThreadRow> {
+        self.require_thread(thread_id)?;
+        let now = current_time_ms();
+        self.connection.execute(
+            "UPDATE threads SET archived_at = ?1, updated_at = ?2 WHERE id = ?3",
+            params![archived_at, now, thread_id],
+        )?;
+        self.require_thread(thread_id)
+    }
+
+    fn require_thread(&self, thread_id: &str) -> Result<ThreadRow> {
+        self.get_thread(thread_id)?
+            .ok_or_else(|| ThreadStoreError::ThreadNotFound(thread_id.to_string()))
+    }
+
     pub fn list_messages(&self, thread_id: &str) -> Result<Vec<MessageRow>> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT id, thread_id, role, content_json, run_id, created_at
+        let mut statement = self.connection.prepare(
+            "SELECT id, thread_id, role, content_json, run_id, created_at
                  FROM messages WHERE thread_id = ?1 ORDER BY created_at ASC",
-            )?;
+        )?;
         let rows = statement
             .query_map(params![thread_id], |row| {
                 Ok(MessageRow {
@@ -243,6 +283,24 @@ impl AgentThreadsStore {
     }
 }
 
+fn has_column(connection: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
+    let names = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<std::result::Result<Vec<_>, rusqlite::Error>>()?;
+    Ok(names.iter().any(|name| name == column))
+}
+
+fn map_thread_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ThreadRow> {
+    Ok(ThreadRow {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        created_at: row.get(2)?,
+        updated_at: row.get(3)?,
+        archived_at: row.get(4)?,
+    })
+}
+
 fn current_time_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -277,12 +335,13 @@ mod tests {
         assert_eq!(thread.id, "thread-1");
         assert_eq!(thread.title.as_deref(), Some("First chat"));
 
-        let listed = store.list_threads().expect("list");
+        let listed = store.list_threads(false).expect("list");
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].id, "thread-1");
+        assert_eq!(listed[0].archived_at, None);
 
-        let content = serde_json::to_string(&json!({ "type": "text", "text": "hello" }))
-            .expect("json");
+        let content =
+            serde_json::to_string(&json!({ "type": "text", "text": "hello" })).expect("json");
         let message = store
             .append_message(
                 "thread-1",
@@ -316,8 +375,8 @@ mod tests {
             .create_thread(Some("thread-1".into()), None)
             .expect("create");
 
-        let first = serde_json::to_string(&json!({ "type": "text", "text": "partial" }))
-            .expect("json");
+        let first =
+            serde_json::to_string(&json!({ "type": "text", "text": "partial" })).expect("json");
         let second = serde_json::to_string(&json!({ "type": "text", "text": "partial reply" }))
             .expect("json");
 
@@ -343,5 +402,101 @@ mod tests {
         let messages = store.list_messages("thread-1").expect("messages");
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].content_json, second);
+    }
+
+    #[test]
+    fn rename_archive_delete_lifecycle() {
+        let dir = TempDir::new().expect("tempdir");
+        let mut store = AgentThreadsStore::open(dir.path()).expect("open");
+        store
+            .create_thread(Some("thread-1".into()), Some("Original".into()))
+            .expect("create");
+        let content =
+            serde_json::to_string(&json!({ "type": "text", "text": "keep me" })).expect("json");
+        store
+            .append_message("thread-1", Some("msg-1".into()), "user", &content, None)
+            .expect("append");
+
+        let renamed = store
+            .rename_thread("thread-1", Some("Renamed".into()))
+            .expect("rename");
+        assert_eq!(renamed.title.as_deref(), Some("Renamed"));
+
+        let archived = store.archive_thread("thread-1").expect("archive");
+        assert!(archived.archived_at.is_some());
+        assert!(store.list_threads(false).expect("list").is_empty());
+        let with_archived = store.list_threads(true).expect("list archived");
+        assert_eq!(with_archived.len(), 1);
+        assert_eq!(with_archived[0].id, "thread-1");
+
+        let restored = store.unarchive_thread("thread-1").expect("unarchive");
+        assert_eq!(restored.archived_at, None);
+        assert_eq!(store.list_threads(false).expect("list").len(), 1);
+
+        store.delete_thread("thread-1").expect("delete");
+        assert!(store.get_thread("thread-1").expect("get").is_none());
+        assert!(
+            store
+                .list_messages("thread-1")
+                .expect("messages")
+                .is_empty()
+        );
+        assert!(matches!(
+            store.rename_thread("thread-1", Some("gone".into())),
+            Err(ThreadStoreError::ThreadNotFound(_))
+        ));
+        assert!(matches!(
+            store.delete_thread("missing"),
+            Err(ThreadStoreError::ThreadNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn migrates_v1_schema_adds_archived_at() {
+        let dir = TempDir::new().expect("tempdir");
+        let path = AgentThreadsStore::db_path(dir.path());
+        std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+        let connection = Connection::open(&path).expect("open v1");
+        connection
+            .execute_batch(
+                "CREATE TABLE threads (
+                    id TEXT PRIMARY KEY,
+                    title TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                 );
+                 CREATE TABLE messages (
+                    id TEXT PRIMARY KEY,
+                    thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL,
+                    content_json TEXT NOT NULL,
+                    run_id TEXT,
+                    created_at INTEGER NOT NULL
+                 );
+                 INSERT INTO threads(id, title, created_at, updated_at)
+                 VALUES ('legacy', 'Old title', 1, 1);
+                 PRAGMA user_version = 1;",
+            )
+            .expect("seed v1");
+        drop(connection);
+
+        let mut store = AgentThreadsStore::open(dir.path()).expect("migrate");
+        let listed = store.list_threads(false).expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, "legacy");
+        assert_eq!(listed[0].archived_at, None);
+
+        let archived = store
+            .archive_thread("legacy")
+            .expect("archive after migrate");
+        assert!(archived.archived_at.is_some());
+        assert!(store.list_threads(false).expect("default list").is_empty());
+        assert_eq!(store.list_threads(true).expect("include archived").len(), 1);
+
+        let version: u32 = Connection::open(store.path())
+            .expect("reopen")
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .expect("user_version");
+        assert_eq!(version, SCHEMA_VERSION);
     }
 }

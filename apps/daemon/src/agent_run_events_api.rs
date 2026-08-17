@@ -195,6 +195,7 @@ pub fn api_append_run_event(
     let scope = WorkspaceScopeParams {
         workspace_id: params.workspace_id,
         root: params.root,
+        ..Default::default()
     };
     let (workspace_id, mut store) = open_store(runtime, &scope)?;
     let event = store
@@ -230,6 +231,7 @@ pub fn api_list_run_events(
     let scope = WorkspaceScopeParams {
         workspace_id: params.workspace_id,
         root: params.root,
+        ..Default::default()
     };
     let (workspace_id, store) = open_store(runtime, &scope)?;
     let run = store
@@ -260,6 +262,7 @@ pub fn api_get_run_status(
     let scope = WorkspaceScopeParams {
         workspace_id: params.workspace_id,
         root: params.root,
+        ..Default::default()
     };
     let (workspace_id, store) = open_store(runtime, &scope)?;
 

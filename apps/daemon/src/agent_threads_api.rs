@@ -9,18 +9,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::api::{resolve_session, ApiError};
-use crate::agent_threads_store::{
-    AgentThreadsStore, MessageRow, ThreadRow, ThreadStoreError,
-};
+use crate::agent_threads_store::{AgentThreadsStore, MessageRow, ThreadRow, ThreadStoreError};
+use crate::api::{ApiError, resolve_session};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceScopeParams {
     #[serde(default)]
     pub workspace_id: Option<String>,
     #[serde(default)]
     pub root: Option<String>,
+    #[serde(default)]
+    pub include_archived: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -34,6 +34,19 @@ pub struct CreateThreadParams {
     pub id: Option<String>,
     #[serde(default)]
     pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchThreadParams {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub root: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub archived: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -61,6 +74,7 @@ pub struct ThreadDto {
     pub title: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    pub archived_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -103,13 +117,29 @@ pub struct AppendMessageResponse {
     pub message: MessageDto,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchThreadResponse {
+    pub workspace_id: String,
+    pub thread: ThreadDto,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteThreadResponse {
+    pub workspace_id: String,
+    pub id: String,
+}
+
 fn workspace_root_from_session(session: &lattice_runtime::WorkspaceSession) -> PathBuf {
     session.root().to_path_buf()
 }
 
 fn map_store_error(err: ThreadStoreError) -> ApiError {
     match err {
-        ThreadStoreError::ThreadNotFound(id) => ApiError::NotFound(format!("thread not found: {id}")),
+        ThreadStoreError::ThreadNotFound(id) => {
+            ApiError::NotFound(format!("thread not found: {id}"))
+        }
         other => ApiError::Internal(other.to_string()),
     }
 }
@@ -120,6 +150,7 @@ fn thread_dto(row: ThreadRow) -> ThreadDto {
         title: row.title,
         created_at: row.created_at,
         updated_at: row.updated_at,
+        archived_at: row.archived_at,
     }
 }
 
@@ -143,11 +174,16 @@ fn resolve_content_json(
         (Some(value), _) => serde_json::to_string(&value)
             .map_err(|err| ApiError::BadRequest(format!("content must be JSON: {err}"))),
         (None, Some(raw)) if !raw.trim().is_empty() => Ok(raw),
-        _ => Err(ApiError::BadRequest("content or contentJson is required".into())),
+        _ => Err(ApiError::BadRequest(
+            "content or contentJson is required".into(),
+        )),
     }
 }
 
-fn open_store(runtime: &LatticeRuntime, scope: &WorkspaceScopeParams) -> Result<(String, AgentThreadsStore), ApiError> {
+fn open_store(
+    runtime: &LatticeRuntime,
+    scope: &WorkspaceScopeParams,
+) -> Result<(String, AgentThreadsStore), ApiError> {
     let session = resolve_session(
         runtime,
         scope.workspace_id.as_deref(),
@@ -166,7 +202,7 @@ pub fn api_list_threads(
 ) -> Result<ListThreadsResponse, ApiError> {
     let (workspace_id, store) = open_store(runtime, &params)?;
     let threads = store
-        .list_threads()
+        .list_threads(params.include_archived)
         .map_err(map_store_error)?
         .into_iter()
         .map(thread_dto)
@@ -185,6 +221,7 @@ pub fn api_create_thread(
     let scope = WorkspaceScopeParams {
         workspace_id: params.workspace_id,
         root: params.root,
+        include_archived: false,
     };
     let (workspace_id, mut store) = open_store(runtime, &scope)?;
     let thread_id = params
@@ -243,6 +280,7 @@ pub fn api_append_message(
     let scope = WorkspaceScopeParams {
         workspace_id: params.workspace_id,
         root: params.root,
+        include_archived: false,
     };
     let (workspace_id, mut store) = open_store(runtime, &scope)?;
     let message = store
@@ -257,6 +295,63 @@ pub fn api_append_message(
     Ok(AppendMessageResponse {
         workspace_id,
         message: message_dto(message)?,
+    })
+}
+
+/// Rename and/or archive/unarchive a workspace-local agent thread.
+pub fn api_patch_thread(
+    runtime: &LatticeRuntime,
+    thread_id: &str,
+    params: PatchThreadParams,
+) -> Result<PatchThreadResponse, ApiError> {
+    if thread_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("thread id is required".into()));
+    }
+    if params.title.is_none() && params.archived.is_none() {
+        return Err(ApiError::BadRequest("title or archived is required".into()));
+    }
+    let scope = WorkspaceScopeParams {
+        workspace_id: params.workspace_id,
+        root: params.root,
+        include_archived: false,
+    };
+    let (workspace_id, mut store) = open_store(runtime, &scope)?;
+    if params.title.is_some() {
+        store
+            .rename_thread(thread_id, params.title)
+            .map_err(map_store_error)?;
+    }
+    if let Some(archived) = params.archived {
+        if archived {
+            store.archive_thread(thread_id).map_err(map_store_error)?;
+        } else {
+            store.unarchive_thread(thread_id).map_err(map_store_error)?;
+        }
+    }
+    let thread = store
+        .get_thread(thread_id)
+        .map_err(map_store_error)?
+        .ok_or_else(|| ApiError::NotFound(format!("thread not found: {thread_id}")))?;
+    Ok(PatchThreadResponse {
+        workspace_id,
+        thread: thread_dto(thread),
+    })
+}
+
+/// Delete a workspace-local agent thread and its messages.
+pub fn api_delete_thread(
+    runtime: &LatticeRuntime,
+    thread_id: &str,
+    params: WorkspaceScopeParams,
+) -> Result<DeleteThreadResponse, ApiError> {
+    if thread_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("thread id is required".into()));
+    }
+    let (workspace_id, mut store) = open_store(runtime, &params)?;
+    store.delete_thread(thread_id).map_err(map_store_error)?;
+    Ok(DeleteThreadResponse {
+        workspace_id,
+        id: thread_id.to_string(),
     })
 }
 
@@ -298,10 +393,12 @@ mod tests {
             WorkspaceScopeParams {
                 workspace_id: None,
                 root: Some(root.clone()),
+                include_archived: false,
             },
         )
         .expect("list");
         assert_eq!(listed.threads.len(), 1);
+        assert_eq!(listed.threads[0].archived_at, None);
 
         let appended = api_append_message(
             &runtime,
@@ -328,11 +425,136 @@ mod tests {
             "thread-api",
             WorkspaceScopeParams {
                 workspace_id: None,
-                root: Some(root),
+                root: Some(root.clone()),
+                include_archived: false,
             },
         )
         .expect("get");
         assert_eq!(fetched.messages.len(), 1);
         assert_eq!(fetched.messages[0].role, "user");
+        assert_eq!(fetched.thread.archived_at, None);
+    }
+
+    #[test]
+    fn api_rename_archive_delete() {
+        let (_dir, runtime, root) = fixture();
+        api_create_thread(
+            &runtime,
+            CreateThreadParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                id: Some("thread-life".into()),
+                title: Some("Original".into()),
+            },
+        )
+        .expect("create");
+        api_append_message(
+            &runtime,
+            "thread-life",
+            AppendMessageParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                id: Some("msg-life".into()),
+                role: "user".into(),
+                content: Some(json!({ "type": "text", "text": "cascade" })),
+                content_json: None,
+                run_id: None,
+            },
+        )
+        .expect("append");
+
+        let renamed = api_patch_thread(
+            &runtime,
+            "thread-life",
+            PatchThreadParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                title: Some("Renamed".into()),
+                archived: None,
+            },
+        )
+        .expect("rename");
+        assert_eq!(renamed.thread.title.as_deref(), Some("Renamed"));
+
+        let archived = api_patch_thread(
+            &runtime,
+            "thread-life",
+            PatchThreadParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                title: None,
+                archived: Some(true),
+            },
+        )
+        .expect("archive");
+        assert!(archived.thread.archived_at.is_some());
+
+        let hidden = api_list_threads(
+            &runtime,
+            WorkspaceScopeParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                include_archived: false,
+            },
+        )
+        .expect("list default");
+        assert!(hidden.threads.is_empty());
+
+        let shown = api_list_threads(
+            &runtime,
+            WorkspaceScopeParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                include_archived: true,
+            },
+        )
+        .expect("list archived");
+        assert_eq!(shown.threads.len(), 1);
+
+        let restored = api_patch_thread(
+            &runtime,
+            "thread-life",
+            PatchThreadParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                title: None,
+                archived: Some(false),
+            },
+        )
+        .expect("unarchive");
+        assert_eq!(restored.thread.archived_at, None);
+
+        let missing = api_patch_thread(
+            &runtime,
+            "missing",
+            PatchThreadParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                title: Some("nope".into()),
+                archived: None,
+            },
+        );
+        assert!(matches!(missing, Err(ApiError::NotFound(_))));
+
+        api_delete_thread(
+            &runtime,
+            "thread-life",
+            WorkspaceScopeParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                include_archived: false,
+            },
+        )
+        .expect("delete");
+        let gone = api_get_thread(
+            &runtime,
+            "thread-life",
+            WorkspaceScopeParams {
+                workspace_id: None,
+                root: Some(root),
+                include_archived: false,
+            },
+        );
+        assert!(matches!(gone, Err(ApiError::NotFound(_))));
     }
 }

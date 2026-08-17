@@ -26,11 +26,28 @@ export type GetAgentThreadArgs = {
   threadId: string;
 };
 
+export type RenameAgentThreadArgs = {
+  workspaceRoot: string;
+  threadId: string;
+  title: string;
+};
+
+export type ArchiveAgentThreadArgs = {
+  workspaceRoot: string;
+  threadId: string;
+};
+
+export type DeleteAgentThreadArgs = {
+  workspaceRoot: string;
+  threadId: string;
+};
+
 export type AgentThreadSummary = {
   id: string;
   title?: string | null;
   createdAt: number;
   updatedAt: number;
+  archivedAt?: number | null;
 };
 
 export type AgentThreadMessage = {
@@ -94,6 +111,41 @@ export async function getAgentThread(
   args: GetAgentThreadArgs,
 ): Promise<GetAgentThreadResult> {
   return invoke<GetAgentThreadResult>("agent_thread_get", {
+    args: {
+      workspaceRoot: args.workspaceRoot,
+      threadId: args.threadId,
+    },
+  });
+}
+
+/** Rename a workspace-local agent thread. */
+export async function renameAgentThread(
+  args: RenameAgentThreadArgs,
+): Promise<AgentThreadSummary> {
+  return invoke<AgentThreadSummary>("agent_thread_rename", {
+    args: {
+      workspaceRoot: args.workspaceRoot,
+      threadId: args.threadId,
+      title: args.title,
+    },
+  });
+}
+
+/** Archive a workspace-local agent thread (omitted from the default list). */
+export async function archiveAgentThread(
+  args: ArchiveAgentThreadArgs,
+): Promise<AgentThreadSummary> {
+  return invoke<AgentThreadSummary>("agent_thread_archive", {
+    args: {
+      workspaceRoot: args.workspaceRoot,
+      threadId: args.threadId,
+    },
+  });
+}
+
+/** Delete a workspace-local agent thread and its messages. */
+export async function deleteAgentThread(args: DeleteAgentThreadArgs): Promise<void> {
+  await invoke<void>("agent_thread_delete", {
     args: {
       workspaceRoot: args.workspaceRoot,
       threadId: args.threadId,

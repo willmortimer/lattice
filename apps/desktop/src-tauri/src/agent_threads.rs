@@ -49,6 +49,12 @@ struct AppendMessageResponse {
     message: Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PatchThreadResponse {
+    thread: AgentThreadSummary,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentThreadListArgs {
@@ -62,6 +68,28 @@ pub struct AgentThreadGetArgs {
     pub thread_id: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentThreadRenameArgs {
+    pub workspace_root: String,
+    pub thread_id: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentThreadArchiveArgs {
+    pub workspace_root: String,
+    pub thread_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentThreadDeleteArgs {
+    pub workspace_root: String,
+    pub thread_id: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentThreadSummary {
@@ -69,6 +97,8 @@ pub struct AgentThreadSummary {
     pub title: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(default)]
+    pub archived_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,10 +175,10 @@ fn http_get_json(path: &str) -> Result<(u16, Value), String> {
     Ok((status, value))
 }
 
-fn http_post_json(path: &str, body: &Value) -> Result<Value, String> {
+fn http_send_json(method: &str, path: &str, body: &Value) -> Result<Value, String> {
     let (token, port) = http_base()?;
     let url = format!("http://127.0.0.1:{port}{path}");
-    let response = ureq::post(&url)
+    let response = ureq::request(method, &url)
         .set("authorization", &format!("Bearer {token}"))
         .set("content-type", "application/json")
         .timeout(Duration::from_secs(5))
@@ -162,6 +192,35 @@ fn http_post_json(path: &str, body: &Value) -> Result<Value, String> {
         return Err(format!("agent thread HTTP {status}: {text}"));
     }
     serde_json::from_str(&text).map_err(|err| format!("agent thread HTTP JSON failed: {err}"))
+}
+
+fn http_post_json(path: &str, body: &Value) -> Result<Value, String> {
+    http_send_json("POST", path, body)
+}
+
+fn http_patch_json(path: &str, body: &Value) -> Result<Value, String> {
+    http_send_json("PATCH", path, body)
+}
+
+fn http_delete_json(path: &str) -> Result<(u16, Value), String> {
+    let (token, port) = http_base()?;
+    let url = format!("http://127.0.0.1:{port}{path}");
+    let response = ureq::delete(&url)
+        .set("authorization", &format!("Bearer {token}"))
+        .timeout(Duration::from_secs(5))
+        .call()
+        .map_err(|err| format!("agent thread HTTP request failed: {err}"))?;
+    let status = response.status();
+    let text = response
+        .into_string()
+        .map_err(|err| format!("agent thread HTTP response body failed: {err}"))?;
+    let value = if text.trim().is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_str(&text)
+            .map_err(|err| format!("agent thread HTTP JSON failed: {err}"))?
+    };
+    Ok((status, value))
 }
 
 /// Create a workspace-local agent thread when it does not already exist.
@@ -193,10 +252,9 @@ pub fn agent_thread_ensure(args: AgentThreadEnsureArgs) -> Result<(), String> {
         body["title"] = Value::String(title);
     }
 
-    let response: CreateThreadResponse = serde_json::from_value(
-        http_post_json("/v1/agent_threads", &body)?,
-    )
-    .map_err(|err| format!("unexpected create thread response: {err}"))?;
+    let response: CreateThreadResponse =
+        serde_json::from_value(http_post_json("/v1/agent_threads", &body)?)
+            .map_err(|err| format!("unexpected create thread response: {err}"))?;
 
     if response.thread.id != args.thread_id {
         return Err(format!(
@@ -277,4 +335,66 @@ pub fn agent_thread_get(args: AgentThreadGetArgs) -> Result<GetAgentThreadResult
         return Err(format!("agent thread HTTP {status}: {value}"));
     }
     serde_json::from_value(value).map_err(|err| format!("unexpected get thread response: {err}"))
+}
+
+/// Rename a workspace-local agent thread.
+#[tauri::command]
+pub fn agent_thread_rename(args: AgentThreadRenameArgs) -> Result<AgentThreadSummary, String> {
+    if args.workspace_root.trim().is_empty() {
+        return Err("workspace root is required".into());
+    }
+    if args.thread_id.trim().is_empty() {
+        return Err("thread id is required".into());
+    }
+    let body = serde_json::json!({
+        "root": args.workspace_root,
+        "title": args.title,
+    });
+    let path = format!("/v1/agent_threads/{}", args.thread_id);
+    let response: PatchThreadResponse = serde_json::from_value(http_patch_json(&path, &body)?)
+        .map_err(|err| format!("unexpected rename thread response: {err}"))?;
+    Ok(response.thread)
+}
+
+/// Archive a workspace-local agent thread (hidden from the default list).
+#[tauri::command]
+pub fn agent_thread_archive(args: AgentThreadArchiveArgs) -> Result<AgentThreadSummary, String> {
+    if args.workspace_root.trim().is_empty() {
+        return Err("workspace root is required".into());
+    }
+    if args.thread_id.trim().is_empty() {
+        return Err("thread id is required".into());
+    }
+    let body = serde_json::json!({
+        "root": args.workspace_root,
+        "archived": true,
+    });
+    let path = format!("/v1/agent_threads/{}", args.thread_id);
+    let response: PatchThreadResponse = serde_json::from_value(http_patch_json(&path, &body)?)
+        .map_err(|err| format!("unexpected archive thread response: {err}"))?;
+    Ok(response.thread)
+}
+
+/// Delete a workspace-local agent thread and its messages.
+#[tauri::command]
+pub fn agent_thread_delete(args: AgentThreadDeleteArgs) -> Result<(), String> {
+    if args.workspace_root.trim().is_empty() {
+        return Err("workspace root is required".into());
+    }
+    if args.thread_id.trim().is_empty() {
+        return Err("thread id is required".into());
+    }
+    let path = format!(
+        "/v1/agent_threads/{}?root={}",
+        args.thread_id,
+        percent_encode_query(&args.workspace_root),
+    );
+    let (status, value) = http_delete_json(&path)?;
+    if status == 404 {
+        return Err(format!("thread not found: {}", args.thread_id));
+    }
+    if status < 200 || status >= 300 {
+        return Err(format!("agent thread HTTP {status}: {value}"));
+    }
+    Ok(())
 }

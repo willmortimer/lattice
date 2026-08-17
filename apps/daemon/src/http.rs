@@ -24,8 +24,9 @@ use crate::agent_run_events_api::{
     GetRunStatusParams, ListRunEventsParams,
 };
 use crate::agent_threads_api::{
-    api_append_message, api_create_thread, api_get_thread, api_list_threads, AppendMessageParams,
-    CreateThreadParams, WorkspaceScopeParams,
+    api_append_message, api_create_thread, api_delete_thread, api_get_thread, api_list_threads,
+    api_patch_thread, AppendMessageParams, CreateThreadParams, PatchThreadParams,
+    WorkspaceScopeParams,
 };
 use crate::api::{
     api_build_context, api_cancel_job, api_cloud_blob_open, api_create_proposal,
@@ -248,6 +249,36 @@ async fn route_agent_thread_append_message(
         return resp;
     }
     match api_append_message(&state.daemon.runtime, &thread_id, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_thread_patch(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Path(thread_id): Path<String>,
+    Json(body): Json<PatchThreadParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_patch_thread(&state.daemon.runtime, &thread_id, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_thread_delete(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Path(thread_id): Path<String>,
+    Query(params): Query<WorkspaceScopeParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_delete_thread(&state.daemon.runtime, &thread_id, params) {
         Ok(value) => (StatusCode::OK, Json(value)).into_response(),
         Err(err) => err.into_response(),
     }
@@ -710,7 +741,12 @@ pub fn router(daemon: DaemonState) -> Router {
             "/v1/agent_threads",
             get(route_agent_threads_list).post(route_agent_threads_create),
         )
-        .route("/v1/agent_threads/{id}", get(route_agent_thread_get))
+        .route(
+            "/v1/agent_threads/{id}",
+            get(route_agent_thread_get)
+                .patch(route_agent_thread_patch)
+                .delete(route_agent_thread_delete),
+        )
         .route(
             "/v1/agent_threads/{id}/messages",
             post(route_agent_thread_append_message),

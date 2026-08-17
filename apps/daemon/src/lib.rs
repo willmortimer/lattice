@@ -59,9 +59,10 @@ pub use agent_run_events_store::{
     AgentRunEventsStore, RunEventRow, RunEventStoreError, RunRow, RunStatus,
 };
 pub use agent_threads_api::{
-    api_append_message, api_create_thread, api_get_thread, api_list_threads, AppendMessageParams,
-    AppendMessageResponse, CreateThreadParams, CreateThreadResponse, GetThreadResponse,
-    ListThreadsResponse, MessageDto, ThreadDto, WorkspaceScopeParams,
+    api_append_message, api_create_thread, api_delete_thread, api_get_thread, api_list_threads,
+    api_patch_thread, AppendMessageParams, AppendMessageResponse, CreateThreadParams,
+    CreateThreadResponse, DeleteThreadResponse, GetThreadResponse, ListThreadsResponse, MessageDto,
+    PatchThreadParams, PatchThreadResponse, ThreadDto, WorkspaceScopeParams,
 };
 pub use api::{
     api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,

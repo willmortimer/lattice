@@ -28,7 +28,7 @@ fn fixture() -> (TempDir, Arc<LatticeRuntime>, String) {
     (dir, Arc::new(LatticeRuntime::new()), root)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn agent_threads_crud_round_trip_with_token() {
     let (_dir, runtime, root) = fixture();
     let app = api_router(daemon_state_for_tests("secret-token", runtime));
@@ -101,6 +101,7 @@ async fn agent_threads_crud_round_trip_with_token() {
     assert_eq!(append_json["message"]["id"].as_str().unwrap(), "msg-http");
 
     let get = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("GET")
@@ -121,9 +122,148 @@ async fn agent_threads_crud_round_trip_with_token() {
         "hello from http"
     );
 
-    let db_path = _dir
-        .path()
-        .join(".lattice/agent/threads.sqlite");
+    let rename = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/v1/agent_threads/thread-http")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer secret-token")
+                .body(Body::from(
+                    serde_json::json!({
+                        "root": root,
+                        "title": "Renamed HTTP thread"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rename.status(), StatusCode::OK);
+    let rename_json = body_json(rename).await;
+    assert_eq!(
+        rename_json["thread"]["title"].as_str().unwrap(),
+        "Renamed HTTP thread"
+    );
+
+    let archive = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/v1/agent_threads/thread-http")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer secret-token")
+                .body(Body::from(
+                    serde_json::json!({
+                        "root": root,
+                        "archived": true
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(archive.status(), StatusCode::OK);
+    assert!(body_json(archive).await["thread"]["archivedAt"].is_number());
+
+    let hidden = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/v1/agent_threads?workspaceId={workspace_id}"))
+                .header("authorization", "Bearer secret-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(hidden.status(), StatusCode::OK);
+    assert!(
+        body_json(hidden).await["threads"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    let shown = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/v1/agent_threads?workspaceId={workspace_id}&includeArchived=true"
+                ))
+                .header("authorization", "Bearer secret-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(shown.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(shown).await["threads"].as_array().unwrap().len(),
+        1
+    );
+
+    let missing_patch = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/v1/agent_threads/missing")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer secret-token")
+                .body(Body::from(
+                    serde_json::json!({
+                        "root": root,
+                        "title": "gone"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_patch.status(), StatusCode::NOT_FOUND);
+
+    let delete = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!(
+                    "/v1/agent_threads/thread-http?workspaceId={workspace_id}"
+                ))
+                .header("authorization", "Bearer secret-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete.status(), StatusCode::OK);
+
+    let missing_delete = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!(
+                    "/v1/agent_threads/thread-http?workspaceId={workspace_id}"
+                ))
+                .header("authorization", "Bearer secret-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_delete.status(), StatusCode::NOT_FOUND);
+
+    let db_path = _dir.path().join(".lattice/agent/threads.sqlite");
     assert!(db_path.exists());
 }
 
@@ -143,4 +283,38 @@ async fn agent_threads_routes_require_auth() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn agent_threads_patch_and_delete_require_auth() {
+    let (_dir, runtime, root) = fixture();
+    let app = api_router(daemon_state_for_tests("secret-token", runtime));
+
+    let patch = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/v1/agent_threads/thread-http")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "root": root, "title": "nope" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(patch.status(), StatusCode::UNAUTHORIZED);
+
+    let delete = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/agent_threads/thread-http?root={root}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete.status(), StatusCode::UNAUTHORIZED);
 }
