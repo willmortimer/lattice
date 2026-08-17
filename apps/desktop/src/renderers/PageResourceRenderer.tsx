@@ -10,7 +10,12 @@ import {
   looksLikeLatticeResourceId,
   resourceIdForPath,
 } from "../lib/resourceCatalog";
-import { getResourceStat } from "../lib/resourceStat";
+import {
+  getResourceStat,
+  persistModeFromResourceStat,
+  resourceAuthorityForPersistMode,
+  setResourceAuthority,
+} from "../lib/resourceStat";
 import type { ResourceRendererProps } from "../resourceRendererRegistry";
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceRendererContext } from "./RendererContext";
@@ -39,36 +44,64 @@ export function PageResourceRenderer({
   );
   const [persistMode, setPersistMode] = useState<PagePersistMode>("plain");
   const handlePersistModeChange = useCallback(
-    (mode: PagePersistMode) => {
-      setPersistMode(mode);
-      callbacks.onPersistModeChange?.(mode);
+    async (mode: PagePersistMode) => {
+      if (!context.workspaceRoot) {
+        console.error("Cannot persist page mode without a workspace root");
+        return;
+      }
+      if (mode === "collaborative" && !registryResourceId) {
+        console.error("Cannot enable collaborative mode without a registry resource id");
+        return;
+      }
+      const authority = resourceAuthorityForPersistMode(
+        mode,
+        registryResourceId ?? "",
+      );
+      try {
+        await setResourceAuthority(context.workspaceRoot, pagePath, authority);
+        setPersistMode(mode);
+        callbacks.onPersistModeChange?.(mode);
+      } catch (err) {
+        console.error("Failed to persist page mode", err);
+      }
     },
-    [callbacks],
+    [callbacks, context.workspaceRoot, pagePath, registryResourceId],
   );
 
   useEffect(() => {
     const fromCatalog = resolveRegistryResourceId(context.catalog, pagePath);
     if (fromCatalog) {
       setRegistryResourceId(fromCatalog);
-      return;
     }
     if (!context.workspaceRoot) {
-      setRegistryResourceId(undefined);
+      if (!fromCatalog) {
+        setRegistryResourceId(undefined);
+      }
       return;
     }
     let cancelled = false;
     void getResourceStat(context.workspaceRoot, pagePath).then((stat) => {
       if (cancelled) return;
-      if (looksLikeLatticeResourceId(stat.resource_id)) {
-        setRegistryResourceId(stat.resource_id);
-      } else {
-        setRegistryResourceId(undefined);
+      const statId = looksLikeLatticeResourceId(stat.resource_id)
+        ? stat.resource_id
+        : undefined;
+      if (!fromCatalog) {
+        setRegistryResourceId(statId);
+      }
+      const registryId = fromCatalog ?? statId;
+      if (registryId && settings.labs.collaborativePageEditor) {
+        setPersistMode(persistModeFromResourceStat(stat, registryId, true));
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [context.catalog, context.workspaceRoot, pagePath]);
+  }, [
+    context.catalog,
+    context.workspaceRoot,
+    pagePath,
+    settings.labs.collaborativePageEditor,
+  ]);
 
   const collaborativeAvailable =
     settings.labs.collaborativePageEditor &&

@@ -3,11 +3,33 @@ use std::path::Path;
 use crate::cloud::{fetch_cloud_blob, roundtrip_verify_blob, CloudBlobClient};
 use crate::error::{Error, Result};
 use crate::registry::NamespaceRegistry;
-use crate::types::{AuthorityMode, HydrationInputDigest, ResourceStat};
+use crate::types::{AuthorityMode, HydrationInputDigest, ResourceAuthority, ResourceStat};
 
 /// Inspect authority and materialization for a workspace-relative path.
 pub fn resource_stat(workspace_root: &Path, path: &str) -> Result<ResourceStat> {
     let registry = NamespaceRegistry::open(workspace_root)?;
+    registry.resource_stat(path)
+}
+
+/// Set durable editing authority for a workspace-relative path and return the updated stat.
+///
+/// Registers the path with [`NamespaceRegistry::ensure_local_file`] when missing, mirroring
+/// [`resource_stat_or_register`].
+pub fn set_resource_authority(
+    workspace_root: &Path,
+    path: &str,
+    authority: ResourceAuthority,
+) -> Result<ResourceStat> {
+    let mut registry = NamespaceRegistry::open(workspace_root)?;
+    match registry.resource_stat(path) {
+        Ok(_) => {}
+        Err(crate::error::Error::ResourceNotFound { .. }) => {
+            registry.ensure_local_file(path)?;
+        }
+        Err(err) => return Err(err),
+    }
+    registry.set_resource_authority(path, authority)?;
+    registry.save()?;
     registry.resource_stat(path)
 }
 
@@ -97,7 +119,7 @@ mod tests {
     use super::*;
     use crate::cloud::InMemoryCloudBlobClient;
     use crate::registry::NamespaceRegistry;
-    use crate::types::{AuthorityMode, ContentHash};
+    use crate::types::{AuthorityMode, ContentHash, ResourceAuthority, ResourceId};
     use tempfile::tempdir;
 
     struct FailingGetBlobClient;
@@ -196,6 +218,32 @@ mod tests {
         let err =
             open_cloud_authoritative_bytes(dir.path(), "notes/a.md", &client).unwrap_err();
         assert!(matches!(err, Error::NotCloudAuthoritative { .. }));
+    }
+
+    #[test]
+    fn set_resource_authority_collaborative_round_trips() {
+        let dir = tempdir().unwrap();
+        let doc_id = ResourceId::new();
+        let stat = set_resource_authority(
+            dir.path(),
+            "notes/a.md",
+            ResourceAuthority::Collaborative {
+                doc_id,
+                materialized_revision: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            stat.resource_authority,
+            ResourceAuthority::Collaborative {
+                doc_id,
+                materialized_revision: None,
+            }
+        );
+
+        let reopened = NamespaceRegistry::open(dir.path()).unwrap();
+        let reread = reopened.resource_stat("notes/a.md").unwrap();
+        assert_eq!(reread.resource_authority, stat.resource_authority);
     }
 
     #[test]

@@ -25,6 +25,7 @@ import {
 import {
   formatAuthority,
   formatMaterialization,
+  formatResourceAuthority,
   getResourceStat,
   type ResourceStat,
 } from "../lib/resourceStat";
@@ -436,6 +437,10 @@ export function ResourceInspector({
               {resource && resourceStat && (
                 <>
                   <div><dt>Authority</dt><dd>{formatAuthority(resourceStat.authority)}</dd></div>
+                  <div>
+                    <dt>Editing authority</dt>
+                    <dd>{formatResourceAuthority(resourceStat.resource_authority)}</dd>
+                  </div>
                   <div><dt>Materialization</dt><dd>{formatMaterialization(resourceStat.materialization)}</dd></div>
                   {resourceStat.content_hash && (
                     <div><dt>Content hash</dt><dd><code>{resourceStat.content_hash}</code></dd></div>

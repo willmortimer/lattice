@@ -261,6 +261,7 @@ pub fn run() {
             search::search_workspace,
             search::get_backlinks,
             resource_stat::get_resource_stat,
+            resource_stat::set_resource_authority,
             search::rebuild_index,
             relationship::list_relationship_edges_cmd,
             watcher::start_watching,
