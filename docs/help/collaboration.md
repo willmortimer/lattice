@@ -30,8 +30,16 @@ Open a page that has a resource ID. In the page toolbar you will see:
 
 Switch with the **Plain file** / **Collaborative** toggles above the editor.
 
+Your choice is remembered when you reopen the page in the same workspace, as long
+as Labs is still on and the page still has a resource ID. Switching back to
+**Plain file** is remembered the same way.
+
 In **Collaborative** mode, a **Comments** button may appear for inline
 discussion.
+
+**Inspect → properties** shows **Editing authority** with the same labels
+(**Plain file** or **Collaborative**). That is separate from **Authority**
+(which shows who owns the canonical copy, such as **Local** or **Cloud**).
 
 ## When Collaborative is not offered
 
@@ -41,9 +49,11 @@ resource ID in Inspect → **properties**. New or unregistered pages stay on
 
 ## Related Labs settings
 
-Under the same **Labs** section you may see **Enable remote Yrs provider
-(Labs)** for cloud snapshot exchange when signed in. That is optional and
-separate from everyday single-user editing.
+Under the same **Labs** section you may see **Labs remote Yrs provider** with
+**Enable remote Yrs provider (Labs)**. That toggle stays disabled until
+**Enable collaborative page editor (Labs)** is on.
 
-For backing up files to the cloud, use **Inspect → Back up to Lattice Cloud**
-(see [Inspect](inspect.md)), not the collaborative toggles.
+When you are signed in to Cloud and the remote Yrs Labs toggle is on, live
+collaborative edits can catch up through the cloud. Local editing still works
+if you are offline. This is **not** **Inspect → Back up to Lattice Cloud** (see
+[Inspect](inspect.md)).

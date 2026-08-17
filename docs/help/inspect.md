@@ -24,7 +24,7 @@ Use the tabs across the top of Inspect:
 
 | Section | What you get |
 | --- | --- |
-| **properties** | Kind, path, format, resource ID, **Authority**, **Materialization** |
+| **properties** | Kind, path, format, resource ID, **Authority**, **Editing authority**, **Materialization** |
 | **links** | Backlinks (pages only) |
 | **graph** | How this item connects to neighbors |
 | **history** | Recent command history for this resource |
@@ -34,8 +34,11 @@ Use the tabs across the top of Inspect:
 | **diagnostics** | Errors and reconciliation status |
 
 **Authority** tells you who owns the canonical copy (for example **Local** or
-**Cloud**). **Materialization** tells you how much of the file is present on
-disk (for example **Cached** or **Metadata only**).
+**Cloud**). **Editing authority** shows how the page is being edited when Labs
+collaborative editing is available: **Plain file** or **Collaborative**. That is
+separate from **Authority** — it does not mean the file is backed up to the
+cloud. **Materialization** tells you how much of the file is present on disk
+(for example **Cached** or **Metadata only**).
 
 ## Back up to Lattice Cloud
 

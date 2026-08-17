@@ -11,7 +11,7 @@ Ignore advanced panels until you need them. Day one is these surfaces:
 | --- | --- |
 | **Left tree (Files)** | Browse the real folder |
 | **Main area** | Edit or view whatever you opened |
-| **Activity rail** | Home, Files, Search, Quick Capture, **agent** (robot), **Help**, Settings |
+| **Activity rail** | Home, Files, Search, Quick Capture, **agent** (robot), Settings |
 | **⌘/Ctrl+P** | Create something or jump by name |
 | **⌘/Ctrl+K** | Search inside this workspace |
 | **⌘⇧2** | **Screen Clip** → workspace Capture Inbox |

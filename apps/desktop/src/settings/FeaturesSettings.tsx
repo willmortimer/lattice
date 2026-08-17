@@ -356,7 +356,7 @@ export function FeaturesSettings({
           <SettingRow
             settingId="features.labs-remote-yrs"
             title="Labs remote Yrs provider"
-            description="When collaborative editing is on and you are signed in to Cloud, exchange full Yrs snapshots via a cloud blob sidecar (local journal stays authoritative)."
+            description="When collaborative Labs is on and you are signed in, live edits catch up through the cloud; the local journal stays authoritative."
           >
             <Toggle
               checked={remoteYrsProvider}

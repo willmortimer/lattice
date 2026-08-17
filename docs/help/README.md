@@ -3,9 +3,6 @@
 End-user docs for the desktop **Help** view. Voice: **what do I click?** Short
 pages. No architecture lectures.
 
-**Mirrored from** the umbrella repo `docs/help/` at the lattice-ecosystem root.
-Edit there first, then copy into this tree for the public client bundle.
-
 ## Audience split
 
 | Need | Use |
@@ -21,9 +18,8 @@ click” map and task recipes (import CSV, place on canvas). Link out for depth.
 
 | Item | Rule |
 | --- | --- |
-| Source of truth | Umbrella `docs/help/` |
-| Client mirror | This folder (`lattice/docs/help/`) |
+| Source of truth | `docs/help/` |
 | Navigation | `navigation.json` |
-| Publish | Bundled via Vite raw imports in `apps/desktop/src/help/` |
+| Publish | `scripts/sync-docs-surfaces.mjs` → help bundle |
 
 Private corpus must never be copied into this tree.
