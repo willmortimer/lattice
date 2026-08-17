@@ -633,8 +633,15 @@ export function useDesktopController() {
     );
   }, [currentPageRevisionRef, setSession]);
 
+  const [pagePersistMode, setPagePersistMode] = useState<PagePersistMode>("plain");
+
+  useEffect(() => {
+    setPagePersistMode(pagePersistModeRef.current);
+  }, [pagePersistModeRef, selected?.path]);
+
   const handlePagePersistModeChange = useCallback((mode: PagePersistMode) => {
     pagePersistModeRef.current = mode;
+    setPagePersistMode(mode);
   }, [pagePersistModeRef]);
   const profileNotices = [runtimeNotice, ...profile.notices]
     .filter((notice): notice is NonNullable<typeof notice> => notice !== null)
@@ -1257,6 +1264,7 @@ export function useDesktopController() {
     handleNotebookContentChange,
     handleRevisionChange,
     handlePagePersistModeChange,
+    pagePersistMode,
     reloadPageFromDisk: resourceController.reloadPageFromDisk,
     setSession,
     appLock,

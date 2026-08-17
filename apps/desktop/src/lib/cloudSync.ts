@@ -22,7 +22,11 @@ export type ExecuteOutcome =
   | "pushed"
   | "pulled"
   | "skipped_conflicted"
+  | "kept_local"
+  | "took_cloud"
   | "failed";
+
+export type ConflictResolution = "keep_local" | "take_cloud";
 
 export interface WorkspaceSyncExecuteResult {
   resourceId: string;
@@ -51,6 +55,8 @@ export interface WorkspaceCloudSyncSnapshot {
   conflictCount: number;
   errorCount: number;
   cloudWorkspaceId: string | null;
+  /** Resource ids still waiting on Keep local / Take cloud. */
+  conflictedResourceIds: string[];
 }
 
 export const WORKSPACE_CLOUD_SYNC_DEBOUNCE_MS = 2_000;
@@ -62,6 +68,7 @@ const IDLE_SNAPSHOT: WorkspaceCloudSyncSnapshot = {
   conflictCount: 0,
   errorCount: 0,
   cloudWorkspaceId: null,
+  conflictedResourceIds: [],
 };
 
 export async function pushPullWorkspaceSync(
@@ -70,16 +77,42 @@ export async function pushPullWorkspaceSync(
   return invoke<WorkspaceSyncRunReport>("push_pull_workspace_sync_cmd", { root });
 }
 
+/** Keep local (push with If-Match) or take cloud (pull) for one conflicted resource. */
+export async function resolveWorkspaceSyncConflict(
+  root: string,
+  resourceId: string,
+  resolution: ConflictResolution,
+): Promise<WorkspaceSyncExecuteResult> {
+  return invoke<WorkspaceSyncExecuteResult>("resolve_workspace_sync_conflict_cmd", {
+    root,
+    resourceId,
+    resolution,
+  });
+}
+
+/** Resource ids the planner left conflicted (for Inspect resolve UI). */
+export function conflictedResourceIds(report: WorkspaceSyncRunReport): string[] {
+  return report.results
+    .filter(
+      (result) =>
+        result.outcome === "skipped_conflicted" || result.status === "conflicted",
+    )
+    .map((result) => result.resourceId);
+}
+
 export function summarizeWorkspaceSyncReport(
   report: WorkspaceSyncRunReport,
 ): Pick<
   WorkspaceCloudSyncSnapshot,
-  "phase" | "message" | "conflictCount" | "errorCount" | "cloudWorkspaceId"
+  | "phase"
+  | "message"
+  | "conflictCount"
+  | "errorCount"
+  | "cloudWorkspaceId"
+  | "conflictedResourceIds"
 > {
-  const conflictCount = report.results.filter(
-    (result) =>
-      result.outcome === "skipped_conflicted" || result.status === "conflicted",
-  ).length;
+  const conflictedIds = conflictedResourceIds(report);
+  const conflictCount = conflictedIds.length;
   const errorCount = report.results.filter((result) => result.outcome === "failed").length;
   const pushed = report.results.some((result) => result.outcome === "pushed");
   const pulled = report.results.some((result) => result.outcome === "pulled");
@@ -94,6 +127,7 @@ export function summarizeWorkspaceSyncReport(
       conflictCount,
       errorCount,
       cloudWorkspaceId: report.cloudWorkspaceId,
+      conflictedResourceIds: conflictedIds,
     };
   }
   if (errorCount > 0) {
@@ -104,6 +138,7 @@ export function summarizeWorkspaceSyncReport(
       conflictCount,
       errorCount,
       cloudWorkspaceId: report.cloudWorkspaceId,
+      conflictedResourceIds: conflictedIds,
     };
   }
 
@@ -122,6 +157,7 @@ export function summarizeWorkspaceSyncReport(
     conflictCount,
     errorCount,
     cloudWorkspaceId: report.cloudWorkspaceId,
+    conflictedResourceIds: conflictedIds,
   };
 }
 
@@ -259,6 +295,7 @@ export class CloudSyncLoop {
           conflictCount: 0,
           errorCount: 1,
           cloudWorkspaceId: null,
+          conflictedResourceIds: [],
         });
         return null;
       } finally {

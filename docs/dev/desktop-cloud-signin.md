@@ -90,3 +90,15 @@ when the cloud GET fails.
 lattice cloud blob-open notes/example.md
 # cloud blob error: cloud request failed: network unreachable
 ```
+
+## Workspace sync conflict resolve
+
+Open-format workspace push/pull (`lattice-sync` + `push_pull_workspace_sync_cmd`)
+classifies hash mismatches as `conflicted` and skips those rows (`skipped_conflicted`)
+so neither side is overwritten automatically. Explicit resolve is
+`resolve_workspace_sync_conflict_cmd` / `resolveWorkspaceSyncConflict(root, resourceId,
+resolution)`: `keep_local` pushes local bytes with `If-Match` equal to the current cloud
+head (409 → typed stale-conflict error), and `take_cloud` GETs the cloud blob and
+atomically replaces the local file. Both paths update registry `content_hash` and
+`.lattice/sync-state.json` like a normal push/pull. Inspect UI wiring is separate;
+`conflictedResourceIds(report)` lists ids still waiting on a choice.

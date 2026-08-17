@@ -1,6 +1,7 @@
 ---
 title: Find things
 description: Jump and search without digging through folders.
+anchor: shell.search
 ---
 
 # Find things

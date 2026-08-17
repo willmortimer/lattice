@@ -1,8 +1,9 @@
 //! Workspace encryption + encrypted cloud backup Tauri commands.
 
 use lattice_handlers::{
-    put_encrypted_workspace_backup, workspace_crypto_lock, workspace_crypto_status,
-    workspace_crypto_unlock, EncryptedBackupPutResult, WorkspaceCryptoStatus,
+    put_encrypted_workspace_backup, restore_encrypted_workspace_backup, workspace_crypto_lock,
+    workspace_crypto_status, workspace_crypto_unlock, EncryptedBackupPutResult,
+    EncryptedBackupRestoreResult, WorkspaceCryptoStatus,
 };
 
 #[tauri::command]
@@ -27,4 +28,19 @@ pub fn put_encrypted_workspace_backup_cmd(
     root: String,
 ) -> Result<EncryptedBackupPutResult, String> {
     put_encrypted_workspace_backup(&root)
+}
+
+/// Download opaque ciphertext, decrypt with the unlocked DEK, and restore files into
+/// `target_root` (conflict-safe: differing existing files are skipped).
+#[tauri::command]
+pub fn restore_encrypted_workspace_backup_cmd(
+    root: String,
+    target_root: String,
+    backup_id: Option<String>,
+) -> Result<EncryptedBackupRestoreResult, String> {
+    restore_encrypted_workspace_backup(
+        &root,
+        &target_root,
+        backup_id.as_deref(),
+    )
 }

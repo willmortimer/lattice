@@ -149,6 +149,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
     applyWorkspaceSettings, handleOpenWiki, openLinkTarget,     handleNotebookContentChange, handleRevisionChange,
     handlePagePersistModeChange,
+    pagePersistMode,
     reloadPageFromDisk,
     setSession,
     appLock, setAppLock,
@@ -948,6 +949,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 onReloadActivePage={() => {
                   void reloadPageFromDisk();
                 }}
+                collaborativePageEditor={settings.labs.collaborativePageEditor}
+                remoteYrsProvider={settings.labs.remoteYrsProvider}
+                pagePersistMode={pagePersistMode}
+                workspaceId={snapshot?.id ?? null}
               />
             )}
 

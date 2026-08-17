@@ -33,6 +33,11 @@ describe("help navigation parse", () => {
     );
     expect(page.anchor).toBe("shell.search");
   });
+
+  it("reads anchor frontmatter from find-and-jump", () => {
+    const page = findHelpPageByStem(CORPUS.pages, "find-and-jump");
+    expect(page?.anchor).toBe("shell.search");
+  });
 });
 
 describe("help search filter", () => {

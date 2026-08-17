@@ -10,7 +10,9 @@ import {
 } from "../lib/cloudBackup";
 import {
   putEncryptedWorkspaceBackup,
+  restoreEncryptedWorkspaceBackup,
   type EncryptedBackupPutResult,
+  type EncryptedBackupRestoreResult,
 } from "../lib/encryptedBackup";
 import { triggerWorkspaceCloudSync } from "../lib/cloudSync";
 import { useDesktopUiStore } from "../shell/desktopUiStore";
@@ -114,6 +116,11 @@ export function FeaturesSettings({
   const [encBackupBusy, setEncBackupBusy] = useState(false);
   const [encBackupError, setEncBackupError] = useState<string | null>(null);
   const [encBackupResult, setEncBackupResult] = useState<EncryptedBackupPutResult | null>(null);
+  const [encRestoreBusy, setEncRestoreBusy] = useState(false);
+  const [encRestoreError, setEncRestoreError] = useState<string | null>(null);
+  const [encRestoreResult, setEncRestoreResult] = useState<EncryptedBackupRestoreResult | null>(
+    null,
+  );
   const [cloudSyncBusy, setCloudSyncBusy] = useState(false);
   const workspaceCloudSync = useDesktopUiStore((state) => state.workspaceCloudSync);
 
@@ -206,6 +213,33 @@ export function FeaturesSettings({
       setEncBackupError(message);
     } finally {
       setEncBackupBusy(false);
+    }
+  }
+
+  async function handleEncryptedRestore() {
+    if (inBrowser || encRestoreBusy) return;
+    if (!workspaceRoot || !workspaceId) {
+      setEncRestoreError("Open a workspace before restoring an encrypted backup.");
+      return;
+    }
+    setEncRestoreBusy(true);
+    setEncRestoreError(null);
+    setEncRestoreResult(null);
+    try {
+      const result = await restoreEncryptedWorkspaceBackup(
+        workspaceRoot,
+        workspaceRoot,
+        workspaceId,
+      );
+      setEncRestoreResult(result);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("Sign in under Settings")) {
+        openCloudAccountSettings();
+      }
+      setEncRestoreError(message);
+    } finally {
+      setEncRestoreBusy(false);
     }
   }
 
@@ -392,16 +426,26 @@ export function FeaturesSettings({
           <SettingRow
             settingId="features.labs-encrypted-backup"
             title="Labs encrypted workspace backup"
-            description="Unlock the workspace DEK in Rust, encrypt a backup payload, and PUT opaque ciphertext to lattice-server. Cloud stores metadata only."
+            description="Unlock the workspace DEK in Rust, encrypt a backup payload, and PUT opaque ciphertext to lattice-server. Cloud stores metadata only. Restore writes into the open workspace root (conflicting paths are skipped)."
           >
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={encBackupBusy}
-              onClick={() => void handleEncryptedBackup()}
-            >
-              {encBackupBusy ? "Encrypting…" : "Encrypted backup to cloud"}
-            </Button>
+            <div className="cloud-account-actions">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={encBackupBusy || encRestoreBusy}
+                onClick={() => void handleEncryptedBackup()}
+              >
+                {encBackupBusy ? "Encrypting…" : "Encrypted backup to cloud"}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={encBackupBusy || encRestoreBusy}
+                onClick={() => void handleEncryptedRestore()}
+              >
+                {encRestoreBusy ? "Restoring…" : "Restore encrypted backup"}
+              </Button>
+            </div>
           </SettingRow>
           {encBackupResult ? (
             <div className="diagnostics-card" role="status">
@@ -412,10 +456,29 @@ export function FeaturesSettings({
               </span>
             </div>
           ) : null}
+          {encRestoreResult ? (
+            <div className="diagnostics-card" role="status">
+              <strong>Encrypted backup restored</strong>
+              <span>
+                {encRestoreResult.backupId} · restored {encRestoreResult.restoredCount}
+                {encRestoreResult.skipped.length > 0
+                  ? ` · skipped ${encRestoreResult.skipped.length}: ${encRestoreResult.skipped
+                      .map((entry) => entry.path)
+                      .join(", ")}`
+                  : ""}
+              </span>
+            </div>
+          ) : null}
           {encBackupError ? (
             <div className="diagnostics-card" role="alert">
               <strong>Encrypted backup error</strong>
               <span>{encBackupError}</span>
+            </div>
+          ) : null}
+          {encRestoreError ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>Encrypted restore error</strong>
+              <span>{encRestoreError}</span>
             </div>
           ) : null}
 

@@ -47,6 +47,25 @@ pub enum ExecutorError {
     MissingPath { resource_id: String },
     #[error("local file missing for push at {path}")]
     MissingLocalFile { path: PathBuf },
+    #[error("resource {resource_id} not found in sync plan")]
+    NotInPlan { resource_id: String },
+    #[error("resource {resource_id} is not conflicted (status: {status:?})")]
+    NotConflicted {
+        resource_id: String,
+        status: SyncStatus,
+    },
+    #[error("cloud head changed during conflict resolve (409) for {resource_id}")]
+    ConflictStale { resource_id: String },
+}
+
+/// Explicit user choice for a planner [`SyncStatus::Conflicted`] row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictResolution {
+    /// Push local bytes over cloud with `If-Match` = current cloud head.
+    KeepLocal,
+    /// Pull cloud blob bytes over the local file.
+    TakeCloud,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,10 +75,13 @@ pub enum ExecuteOutcome {
     Pushed,
     Pulled,
     SkippedConflicted,
+    KeptLocal,
+    TookCloud,
     Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExecuteResult {
     pub resource_id: String,
     pub status: SyncStatus,
@@ -71,6 +93,7 @@ pub struct ExecuteResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncRunReport {
     pub cloud_workspace_id: String,
     pub results: Vec<ExecuteResult>,
@@ -316,6 +339,111 @@ fn execute_pull<C: CloudHttpClient>(
     Ok(hash_hex)
 }
 
+fn map_push_cloud_error(resource_id: &str, err: lattice_cloud_client::CloudError) -> ExecutorError {
+    if err.api_status() == Some(409) {
+        ExecutorError::ConflictStale {
+            resource_id: resource_id.to_string(),
+        }
+    } else {
+        ExecutorError::Cloud(err)
+    }
+}
+
+fn execute_push_mapping_conflict<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    workspace_root: &Path,
+    cloud_workspace_id: &str,
+    bearer: &str,
+    registry: &mut NamespaceRegistry,
+    sync_state: &mut SyncState,
+    entry: &PlanEntry,
+) -> Result<String> {
+    match execute_push(
+        client,
+        workspace_root,
+        cloud_workspace_id,
+        bearer,
+        registry,
+        sync_state,
+        entry,
+    ) {
+        Ok(hash) => Ok(hash),
+        Err(ExecutorError::Cloud(err)) => Err(map_push_cloud_error(&entry.resource_id, err)),
+        Err(err) => Err(err),
+    }
+}
+
+/// Resolve a single conflicted plan row: keep local (push) or take cloud (pull).
+///
+/// Loads sync-heads + planner output, requires the resource to be
+/// [`SyncStatus::Conflicted`], applies the chosen side, and persists registry +
+/// sync-state (same bookkeeping as a normal push/pull).
+///
+/// A cloud `409` on keep-local becomes [`ExecutorError::ConflictStale`].
+pub fn resolve_conflict<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    workspace_root: &Path,
+    cloud_workspace_id: &str,
+    bearer: &str,
+    resource_id: &str,
+    resolution: ConflictResolution,
+) -> Result<ExecuteResult> {
+    let mut registry = NamespaceRegistry::open(workspace_root)?;
+    let mut sync_state = SyncState::open(workspace_root)?;
+    let local = local_snapshot_from_workspace(workspace_root, &registry, &sync_state)?;
+    let cloud_heads = client.get_sync_heads(bearer, cloud_workspace_id)?;
+    let plan_entries = plan(&local, &sync_heads_from_cloud(cloud_heads));
+    let entry = plan_entries
+        .iter()
+        .find(|entry| entry.resource_id == resource_id)
+        .cloned()
+        .ok_or_else(|| ExecutorError::NotInPlan {
+            resource_id: resource_id.to_string(),
+        })?;
+    if entry.status != SyncStatus::Conflicted {
+        return Err(ExecutorError::NotConflicted {
+            resource_id: resource_id.to_string(),
+            status: entry.status,
+        });
+    }
+
+    let (outcome, hash_hex) = match resolution {
+        ConflictResolution::KeepLocal => {
+            let hash_hex = execute_push_mapping_conflict(
+                client,
+                workspace_root,
+                cloud_workspace_id,
+                bearer,
+                &mut registry,
+                &mut sync_state,
+                &entry,
+            )?;
+            (ExecuteOutcome::KeptLocal, hash_hex)
+        }
+        ConflictResolution::TakeCloud => {
+            let hash_hex = execute_pull(
+                client,
+                workspace_root,
+                bearer,
+                &mut registry,
+                &mut sync_state,
+                &entry,
+            )?;
+            (ExecuteOutcome::TookCloud, hash_hex)
+        }
+    };
+
+    registry.save()?;
+    sync_state.save()?;
+    Ok(ExecuteResult {
+        resource_id: entry.resource_id,
+        status: SyncStatus::InSync,
+        outcome,
+        content_hash: Some(hash_hex),
+        error: None,
+    })
+}
+
 /// Fetch sync-heads, plan, execute, and persist registry + sync-state.
 pub fn run_workspace_sync<C: CloudHttpClient>(
     client: &CloudApiClient<C>,
@@ -355,6 +483,7 @@ mod tests {
 
     use lattice_cloud_client::{
         CloudHttpBytesResponse, CloudHttpClient, CloudHttpResponse, CloudError,
+        IF_MATCH_HEADER, WORKSPACE_ID_HEADER,
     };
     use serde_json::Value;
 
@@ -413,13 +542,34 @@ mod tests {
                 let hash = ContentHash::from_bytes(data).expect("hash");
                 let hash_hex = normalize_content_hash(hash.as_str());
                 let resource_id = path.trim_start_matches("/v1/blobs/");
+                if let Some((_, expected)) = headers.iter().find(|(name, _)| *name == IF_MATCH_HEADER)
+                {
+                    let expected = expected.trim().trim_matches('"').to_ascii_lowercase();
+                    let expected = expected
+                        .strip_prefix("sha256:")
+                        .unwrap_or(expected.as_str());
+                    let current = self
+                        .heads
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .find(|head| head.resource_id == resource_id)
+                        .map(|head| head.content_hash.clone());
+                    if current.as_deref() != Some(expected) {
+                        return Ok(CloudHttpBytesResponse {
+                            status: 409,
+                            body: br#"{"error":"if-match conflict"}"#.to_vec(),
+                            content_hash: None,
+                        });
+                    }
+                }
                 self.blobs
                     .lock()
                     .unwrap()
                     .insert(resource_id.to_string(), data.to_vec());
                 if headers
                     .iter()
-                    .any(|(name, _)| *name == lattice_cloud_client::WORKSPACE_ID_HEADER)
+                    .any(|(name, _)| *name == WORKSPACE_ID_HEADER)
                 {
                     self.heads.lock().unwrap().retain(|head| head.resource_id != resource_id);
                     self.heads.lock().unwrap().push(WorkspaceSyncHead {
@@ -570,5 +720,162 @@ mod tests {
             b"local-copy"
         );
         assert_ne!(local_hash, cloud_hash);
+    }
+
+    fn setup_conflicted(
+        local_bytes: &[u8],
+        cloud_bytes: &[u8],
+    ) -> (tempfile::TempDir, ResourceId, String, String, SyncFakeHttp) {
+        let (dir, resource_id, path) = setup_workspace_with_file(local_bytes);
+        let cloud_hash = normalize_content_hash(
+            ContentHash::from_bytes(cloud_bytes).unwrap().as_str(),
+        );
+        let http = SyncFakeHttp::default();
+        http.blobs
+            .lock()
+            .unwrap()
+            .insert(resource_id.to_string(), cloud_bytes.to_vec());
+        http.heads.lock().unwrap().push(WorkspaceSyncHead {
+            resource_id: resource_id.to_string(),
+            content_hash: cloud_hash.clone(),
+            updated_at: 1,
+        });
+        http.json.lock().unwrap().insert(
+            "GET /v1/workspaces/cloud-ws/sync-heads".into(),
+            CloudHttpResponse {
+                status: 200,
+                body: format!(
+                    r#"[{{"resource_id":"{resource_id}","content_hash":"{cloud_hash}","updated_at":1}}]"#
+                ),
+            },
+        );
+        (dir, resource_id, path, cloud_hash, http)
+    }
+
+    #[test]
+    fn resolve_keep_local_pushes_with_if_match() {
+        let (dir, resource_id, path, cloud_hash, http) =
+            setup_conflicted(b"local-wins", b"cloud-copy");
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let result = resolve_conflict(
+            &client,
+            dir.path(),
+            "cloud-ws",
+            "good-token",
+            &resource_id.to_string(),
+            ConflictResolution::KeepLocal,
+        )
+        .unwrap();
+        assert_eq!(result.outcome, ExecuteOutcome::KeptLocal);
+        assert_eq!(result.status, SyncStatus::InSync);
+        let local_hash = normalize_content_hash(
+            ContentHash::from_bytes(b"local-wins").unwrap().as_str(),
+        );
+        assert_eq!(result.content_hash.as_deref(), Some(local_hash.as_str()));
+        assert_ne!(local_hash, cloud_hash);
+        assert_eq!(
+            http.blobs.lock().unwrap().get(&resource_id.to_string()).unwrap(),
+            b"local-wins"
+        );
+        let sync_state = SyncState::open(dir.path()).unwrap();
+        assert_eq!(
+            sync_state.last_synced_hash(&resource_id.to_string()),
+            Some(local_hash.as_str())
+        );
+        let registry = NamespaceRegistry::open(dir.path()).unwrap();
+        let stat = registry.resource_stat(&path).unwrap();
+        assert_eq!(
+            normalize_content_hash(stat.content_hash.as_ref().unwrap().as_str()),
+            local_hash
+        );
+    }
+
+    #[test]
+    fn resolve_take_cloud_overwrites_local_file() {
+        let (dir, resource_id, path, cloud_hash, http) =
+            setup_conflicted(b"local-copy", b"cloud-wins");
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let result = resolve_conflict(
+            &client,
+            dir.path(),
+            "cloud-ws",
+            "good-token",
+            &resource_id.to_string(),
+            ConflictResolution::TakeCloud,
+        )
+        .unwrap();
+        assert_eq!(result.outcome, ExecuteOutcome::TookCloud);
+        assert_eq!(result.status, SyncStatus::InSync);
+        assert_eq!(result.content_hash.as_deref(), Some(cloud_hash.as_str()));
+        assert_eq!(fs::read(dir.path().join(&path)).unwrap(), b"cloud-wins");
+        let sync_state = SyncState::open(dir.path()).unwrap();
+        assert_eq!(
+            sync_state.last_synced_hash(&resource_id.to_string()),
+            Some(cloud_hash.as_str())
+        );
+        let registry = NamespaceRegistry::open(dir.path()).unwrap();
+        let stat = registry.resource_stat(&path).unwrap();
+        assert_eq!(
+            normalize_content_hash(stat.content_hash.as_ref().unwrap().as_str()),
+            cloud_hash
+        );
+    }
+
+    #[test]
+    fn resolve_keep_local_409_is_conflict_stale() {
+        let (dir, resource_id, _path, _cloud_hash, http) =
+            setup_conflicted(b"local-wins", b"cloud-copy");
+        // Advance the fake head so If-Match against the plan's cloud hash fails.
+        let drifted = normalize_content_hash(
+            ContentHash::from_bytes(b"drifted-cloud").unwrap().as_str(),
+        );
+        http.heads.lock().unwrap().clear();
+        http.heads.lock().unwrap().push(WorkspaceSyncHead {
+            resource_id: resource_id.to_string(),
+            content_hash: drifted.clone(),
+            updated_at: 2,
+        });
+        // Planner still sees the old head from sync-heads JSON.
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let err = resolve_conflict(
+            &client,
+            dir.path(),
+            "cloud-ws",
+            "good-token",
+            &resource_id.to_string(),
+            ConflictResolution::KeepLocal,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, ExecutorError::ConflictStale { .. }),
+            "expected ConflictStale, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn resolve_rejects_non_conflicted_resource() {
+        let (dir, resource_id, _path) = setup_workspace_with_file(b"only-local");
+        let http = SyncFakeHttp::default();
+        http.json.lock().unwrap().insert(
+            "GET /v1/workspaces/cloud-ws/sync-heads".into(),
+            CloudHttpResponse {
+                status: 200,
+                body: "[]".into(),
+            },
+        );
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let err = resolve_conflict(
+            &client,
+            dir.path(),
+            "cloud-ws",
+            "good-token",
+            &resource_id.to_string(),
+            ConflictResolution::KeepLocal,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, ExecutorError::NotConflicted { status: SyncStatus::MissingCloud, .. }),
+            "expected NotConflicted, got {err:?}"
+        );
     }
 }

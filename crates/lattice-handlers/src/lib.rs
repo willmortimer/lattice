@@ -91,7 +91,8 @@ pub use workspace::{
 };
 pub use workspace_backup::{
     put_encrypted_workspace_backup, put_encrypted_workspace_backup_with_client,
-    EncryptedBackupPutResult,
+    restore_encrypted_workspace_backup, restore_encrypted_workspace_backup_with_client,
+    EncryptedBackupPutResult, EncryptedBackupRestoreResult, EncryptedBackupSkippedEntry,
 };
 pub use workspace_crypto::{
     workspace_crypto_lock, workspace_crypto_status, workspace_crypto_unlock,
@@ -100,7 +101,8 @@ pub use workspace_crypto::{
 pub use workspace_sync::{
     push_pull_workspace_sync, push_pull_workspace_sync_for_root,
     push_pull_workspace_sync_for_root_with_client, push_pull_workspace_sync_with_client,
+    resolve_workspace_sync_conflict, resolve_workspace_sync_conflict_with_client,
 };
 pub use lattice_sync::{
-    ExecuteOutcome, ExecuteResult, SyncRunReport, SyncStatus,
+    ConflictResolution, ExecuteOutcome, ExecuteResult, SyncRunReport, SyncStatus,
 };

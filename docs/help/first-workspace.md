@@ -1,6 +1,7 @@
 ---
 title: Open a workspace
 description: Create or open the folder Lattice will use.
+anchor: shell.workspace-switcher
 ---
 
 # Open a workspace

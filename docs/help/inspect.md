@@ -64,9 +64,20 @@ you may see:
 Check **Authority** and **Content hash** on the properties tab to compare local
 and cloud state.
 
-## File conflicts vs cloud backup
+## Sync conflict (Keep local / Take cloud)
+
+When local and cloud versions already disagree, Inspect **properties** shows
+**Keep local** and **Take cloud**. Nothing is overwritten until you choose:
+
+- **Keep local** — keep the file on this machine and update the cloud binding
+  to match.
+- **Take cloud** — replace the local file with the cloud copy.
+
+## File conflicts vs cloud
 
 If you edited a page in Lattice and the same file changed on disk outside the
 app, the page editor may offer **Keep local**, **Keep incoming**, or **Keep
-both**. That is a **local file conflict**, not a cloud backup action. Cloud
-backup uses **Back up to Lattice Cloud** and **Reopen from cloud** in Inspect.
+both**. That is a **local file conflict**, not a cloud backup or sync-conflict
+action. Cloud backup uses **Back up to Lattice Cloud** and **Reopen from
+cloud**. Cloud sync disagreement uses **Keep local** / **Take cloud** in
+Inspect.

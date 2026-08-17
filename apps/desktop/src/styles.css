@@ -6845,6 +6845,22 @@ html[data-motion="always"] *::after {
   text-transform: uppercase;
 }
 
+.inspector-help-link {
+  padding: 0;
+  border: 0;
+  color: var(--lt-accent, var(--lt-text-soft));
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: none;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.inspector-help-link:hover {
+  color: var(--lt-text);
+}
+
 .inspector-sections {
   display: flex;
   overflow-x: auto;

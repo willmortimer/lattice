@@ -7,6 +7,19 @@ import {
   reopenResourceFromCloud,
 } from "../lib/cloudBackup";
 import {
+  resolveWorkspaceSyncConflict,
+  type ConflictResolution,
+} from "../lib/cloudSync";
+import {
+  restoreEncryptedWorkspaceBackup,
+  type EncryptedBackupRestoreResult,
+} from "../lib/encryptedBackup";
+import {
+  formatSyncConflictResolveError,
+  inspectCollaborationLabel,
+  shouldShowInspectSyncConflict,
+} from "../lib/inspectSyncConflict";
+import {
   displayResourceIdForPath,
 } from "../lib/resourceCatalog";
 import {
@@ -22,10 +35,12 @@ import {
   type RelationshipMode,
 } from "../lib/relationshipGraph";
 import { X } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import type { PagePersistMode } from "../editor/collab/collabSession";
 import type { DataAppSnapshot } from "../data/types";
 import { inBrowser } from "../demo";
+import { openHelpDeepLink } from "../help";
 import { KIND_LABELS } from "../KindMark";
 import type { Backlink, Resource } from "../types";
 import { InspectorHistoryPanel } from "./InspectorHistoryPanel";
@@ -80,6 +95,10 @@ export function ResourceInspector({
   onClose,
   onOpenFile,
   onReloadActivePage,
+  collaborativePageEditor = false,
+  remoteYrsProvider = false,
+  pagePersistMode = "plain",
+  workspaceId = null,
 }: {
   root: string | null;
   resource: Resource | null;
@@ -90,6 +109,14 @@ export function ResourceInspector({
   onOpenFile: (path: string) => void;
   /** Reload the open page editor after cloud bytes were written to the workspace file. */
   onReloadActivePage?: () => void;
+  /** Labs: collaborative page editor enabled (from shell settings). */
+  collaborativePageEditor?: boolean;
+  /** Labs: remote Yrs provider enabled (diagnostics-only hint). */
+  remoteYrsProvider?: boolean;
+  /** Active page persist mode from the page chrome (Inspect visibility only). */
+  pagePersistMode?: PagePersistMode;
+  /** Open workspace id for encrypted backup restore. */
+  workspaceId?: string | null;
 }) {
   const [section, setSection] = useState<(typeof SECTIONS)[number]>("properties");
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -101,12 +128,26 @@ export function ResourceInspector({
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [cloudOpenStatus, setCloudOpenStatus] = useState<string | null>(null);
+  const [conflictBusy, setConflictBusy] = useState(false);
+  const [conflictError, setConflictError] = useState<string | null>(null);
+  const [conflictStatus, setConflictStatus] = useState<string | null>(null);
+  const [encRestoreBusy, setEncRestoreBusy] = useState(false);
+  const [encRestoreError, setEncRestoreError] = useState<string | null>(null);
+  const [encRestoreResult, setEncRestoreResult] = useState<EncryptedBackupRestoreResult | null>(
+    null,
+  );
   const recordAuthorityStat = useDesktopUiStore((state) => state.recordAuthorityStat);
+  const syncBadgeByPath = useDesktopUiStore((state) => state.syncBadgeByPath);
+  const setSyncBadges = useDesktopUiStore((state) => state.setSyncBadges);
+  const workspaceCloudSync = useDesktopUiStore((state) => state.workspaceCloudSync);
+  const setWorkspaceCloudSync = useDesktopUiStore((state) => state.setWorkspaceCloudSync);
 
   useEffect(() => {
     setResourceStat(null);
     setCloudError(null);
     setCloudOpenStatus(null);
+    setConflictError(null);
+    setConflictStatus(null);
   }, [resource?.path, root]);
 
   useEffect(() => {
@@ -176,6 +217,28 @@ export function ResourceInspector({
     ? displayResourceIdForPath(resource.path, resourceStat?.resource_id)
     : null;
 
+  const showSyncConflict = useMemo(() => {
+    if (!resource || inBrowser) return false;
+    return shouldShowInspectSyncConflict({
+      pathSyncBadge: syncBadgeByPath[resource.path],
+      resourceId: displayId && !displayId.isSynthetic ? displayId.resourceId : null,
+      conflictedResourceIds: workspaceCloudSync.conflictedResourceIds,
+    });
+  }, [resource, syncBadgeByPath, displayId, workspaceCloudSync.conflictedResourceIds]);
+
+  const collaborationLabel = useMemo(
+    () =>
+      inspectCollaborationLabel({
+        collaborativePageEditor,
+        resourceKind: resource?.kind,
+        hasRegistryResourceId: Boolean(displayId && !displayId.isSynthetic),
+        persistMode: pagePersistMode,
+      }),
+    [collaborativePageEditor, resource?.kind, displayId, pagePersistMode],
+  );
+
+  const canRestoreEncryptedBackup = Boolean(root && workspaceId && !inBrowser);
+
   async function handleCloudBackup() {
     if (inBrowser || cloudBusy || !root || !resource) return;
     setCloudBusy(true);
@@ -229,6 +292,77 @@ export function ResourceInspector({
     }
   }
 
+  async function handleResolveConflict(resolution: ConflictResolution) {
+    if (inBrowser || conflictBusy || !root || !resource || !displayId || displayId.isSynthetic) {
+      return;
+    }
+    setConflictBusy(true);
+    setConflictError(null);
+    setConflictStatus(null);
+    try {
+      const result = await resolveWorkspaceSyncConflict(
+        root,
+        displayId.resourceId,
+        resolution,
+      );
+      if (result.outcome === "failed" || result.error) {
+        setConflictError(
+          formatSyncConflictResolveError(result.error ?? "Conflict resolve failed."),
+        );
+        return;
+      }
+      const { [resource.path]: _removed, ...restBadges } = syncBadgeByPath;
+      setSyncBadges(restBadges);
+      setWorkspaceCloudSync((prev) => ({
+        ...prev,
+        conflictedResourceIds: prev.conflictedResourceIds.filter(
+          (id) => id !== displayId.resourceId,
+        ),
+        conflictCount: Math.max(0, prev.conflictCount - 1),
+        phase:
+          prev.conflictCount <= 1 && prev.phase === "conflict" ? "synced" : prev.phase,
+        message:
+          prev.conflictCount <= 1 && prev.phase === "conflict"
+            ? resolution === "keep_local"
+              ? "Kept local version; conflict cleared."
+              : "Took cloud version; conflict cleared."
+            : prev.message,
+      }));
+      setConflictStatus(
+        resolution === "keep_local" ? "Kept local version." : "Took cloud version.",
+      );
+      if (resolution === "take_cloud") {
+        onReloadActivePage?.();
+      }
+      const stat = await getResourceStat(root, resource.path);
+      setResourceStat(stat);
+      recordAuthorityStat(stat);
+    } catch (err: unknown) {
+      setConflictError(formatSyncConflictResolveError(err));
+    } finally {
+      setConflictBusy(false);
+    }
+  }
+
+  async function handleRestoreEncryptedBackup() {
+    if (inBrowser || encRestoreBusy || !root || !workspaceId) return;
+    setEncRestoreBusy(true);
+    setEncRestoreError(null);
+    setEncRestoreResult(null);
+    try {
+      const result = await restoreEncryptedWorkspaceBackup(root, root, workspaceId);
+      setEncRestoreResult(result);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("Sign in under Settings")) {
+        openCloudAccountSettings();
+      }
+      setEncRestoreError(message);
+    } finally {
+      setEncRestoreBusy(false);
+    }
+  }
+
   const canCloudBackup = Boolean(
     root && resource && isCloudBackupResource(resource.kind) && !inBrowser,
   );
@@ -238,7 +372,17 @@ export function ResourceInspector({
     <aside className="inspector">
       <header className="inspector-head">
         <div>
-          <span className="inspector-eyebrow">Inspect</span>
+          <span className="inspector-eyebrow">
+            Inspect
+            {" · "}
+            <button
+              type="button"
+              className="inspector-help-link"
+              onClick={() => openHelpDeepLink("inspect")}
+            >
+              Help
+            </button>
+          </span>
           <strong>{resource ? fileTitle(resource.path) : "Workspace"}</strong>
         </div>
         <IconButton label="Close inspector" onClick={onClose}>
@@ -274,6 +418,18 @@ export function ResourceInspector({
                     {displayId.isSynthetic ? (
                       <span className="inspector-id-note"> placeholder until registry assigns one</span>
                     ) : null}
+                  </dd>
+                </div>
+              )}
+              {collaborationLabel && (
+                <div>
+                  <dt>Collaboration</dt>
+                  <dd>
+                    {collaborationLabel}
+                    <span className="inspector-id-note">
+                      Collaborative edits use the Yrs journal, not markdown autosave. Toggle in the
+                      page chrome.
+                    </span>
                   </dd>
                 </div>
               )}
@@ -318,6 +474,41 @@ export function ResourceInspector({
                 </div>
               )}
             </dl>
+            {showSyncConflict && (
+              <div className="inspector-cloud-actions inspector-sync-conflict" role="region" aria-label="Sync conflict">
+                <p className="inspector-cloud-copy">
+                  Local and cloud versions disagree. Nothing was overwritten — choose which side to
+                  keep.
+                </p>
+                <div className="cloud-account-actions">
+                  <Button
+                    size="sm"
+                    disabled={conflictBusy || !displayId || displayId.isSynthetic}
+                    onClick={() => void handleResolveConflict("keep_local")}
+                  >
+                    {conflictBusy ? "Working…" : "Keep local"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={conflictBusy || !displayId || displayId.isSynthetic}
+                    onClick={() => void handleResolveConflict("take_cloud")}
+                  >
+                    {conflictBusy ? "Working…" : "Take cloud"}
+                  </Button>
+                </div>
+                {conflictStatus ? (
+                  <p className="inspector-cloud-status" role="status">
+                    {conflictStatus}
+                  </p>
+                ) : null}
+                {conflictError ? (
+                  <p className="inspector-cloud-error" role="alert">
+                    {conflictError}
+                  </p>
+                ) : null}
+              </div>
+            )}
             {canCloudBackup && (
               <div className="inspector-cloud-actions">
                 <p className="inspector-cloud-copy">
@@ -356,6 +547,43 @@ export function ResourceInspector({
                 {cloudError ? (
                   <p className="inspector-cloud-error" role="alert">
                     {cloudError}
+                  </p>
+                ) : null}
+              </div>
+            )}
+            {canRestoreEncryptedBackup && (
+              <div className="inspector-cloud-actions">
+                <p className="inspector-cloud-copy">
+                  Restore the latest encrypted workspace backup into this workspace. Existing
+                  conflicting paths are skipped.
+                </p>
+                <div className="cloud-account-actions">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={encRestoreBusy}
+                    onClick={() => void handleRestoreEncryptedBackup()}
+                  >
+                    {encRestoreBusy ? "Restoring…" : "Restore encrypted backup"}
+                  </Button>
+                </div>
+                {encRestoreResult ? (
+                  <p className="inspector-cloud-status" role="status">
+                    Restored {encRestoreResult.restoredCount}
+                    {encRestoreResult.skipped.length > 0
+                      ? ` · skipped ${encRestoreResult.skipped.length}`
+                      : ""}
+                    {encRestoreResult.skipped.length > 0
+                      ? ` (${encRestoreResult.skipped
+                          .slice(0, 3)
+                          .map((entry) => entry.path)
+                          .join(", ")}${encRestoreResult.skipped.length > 3 ? "…" : ""})`
+                      : ""}
+                  </p>
+                ) : null}
+                {encRestoreError ? (
+                  <p className="inspector-cloud-error" role="alert">
+                    {encRestoreError}
                   </p>
                 ) : null}
               </div>
@@ -469,7 +697,16 @@ export function ResourceInspector({
           <div className="inspector-copy"><p>Local workspace access</p><span>Reads are scoped to this directory. Mutations are validated and recorded by the semantic command core.</span></div>
         )}
         {!loading && section === "diagnostics" && (
-          <div className="inspector-copy"><p>{error ? "Problem reported" : "No active diagnostics"}</p><span>{error ?? "The selected resource is loaded without a reported conflict."}</span></div>
+          <div className="inspector-copy">
+            <p>{error ? "Problem reported" : "No active diagnostics"}</p>
+            <span>{error ?? "The selected resource is loaded without a reported conflict."}</span>
+            {remoteYrsProvider && collaborativePageEditor ? (
+              <span className="inspector-id-note">
+                remote Yrs log available (LYRL) — labs remote provider on; local journal stays
+                authoritative.
+              </span>
+            ) : null}
+          </div>
         )}
       </div>
     </aside>
