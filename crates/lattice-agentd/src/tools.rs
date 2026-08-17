@@ -92,6 +92,8 @@ pub struct ToolRunContext {
     pub workspace_root: Option<String>,
     /// Agent thread id for durable run-event correlation (optional).
     pub thread_id: Option<String>,
+    /// Agent protocol/chat run id. KernelFS lifecycle events append here.
+    pub run_id: Option<String>,
 }
 
 impl ToolRunContext {
@@ -102,6 +104,18 @@ impl ToolRunContext {
             .filter(|s| !s.trim().is_empty())
             .cloned()
             .unwrap_or_else(|| format!("kernelfs:{kernelfs_run_id}"))
+    }
+
+    /// Chat/protocol run id for KernelFS lifecycle appends.
+    ///
+    /// Falls back to `kernelfs_run_id` for standalone tool calls that have no
+    /// chat run (tests and non-agent hosts).
+    pub fn chat_run_id_for_kernelfs(&self, kernelfs_run_id: &str) -> String {
+        self.run_id
+            .as_ref()
+            .filter(|s| !s.trim().is_empty())
+            .cloned()
+            .unwrap_or_else(|| kernelfs_run_id.to_string())
     }
 
     /// System-prompt appendix so the model skips a wasted `get_current_context` round.
@@ -1296,6 +1310,7 @@ fn kernelfs_lifecycle_emitter(
         client.clone(),
         KernelfsLifecycleContext {
             kernelfs_run_id: kernelfs_run_id.to_string(),
+            chat_run_id: ctx.chat_run_id_for_kernelfs(kernelfs_run_id),
             thread_id: ctx.thread_id_for_kernelfs(kernelfs_run_id),
             workspace_id: ctx.workspace_id.clone(),
             workspace_root: ctx.workspace_root.clone(),
@@ -2160,6 +2175,7 @@ mod tests {
             workspace_id: Some("ws".into()),
             workspace_root: Some("/tmp".into()),
             thread_id: None,
+            run_id: None,
         };
         let args = json!({
             "cellId": "cell_demo",
@@ -2187,6 +2203,7 @@ mod tests {
             workspace_id: Some("ws".into()),
             workspace_root: Some(workspace.path().to_string_lossy().into_owned()),
             thread_id: None,
+            run_id: None,
         };
         let args = json!({
             "cellId": "cell_demo",
@@ -2336,11 +2353,27 @@ mod tests {
     }
 
     #[test]
+    fn chat_run_id_for_kernelfs_prefers_protocol_run() {
+        let bound = ToolRunContext {
+            workspace_id: None,
+            workspace_root: None,
+            thread_id: Some("thread-1".into()),
+            run_id: Some("chat-run-1".into()),
+        };
+        assert_eq!(bound.chat_run_id_for_kernelfs("kf-1"), "chat-run-1");
+        assert_eq!(
+            ToolRunContext::default().chat_run_id_for_kernelfs("kf-1"),
+            "kf-1"
+        );
+    }
+
+    #[test]
     fn get_current_context_needs_no_client() {
         let ctx = ToolRunContext {
             workspace_id: Some("ws-1".into()),
             workspace_root: Some("/tmp/ws".into()),
             thread_id: None,
+            run_id: None,
         };
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()

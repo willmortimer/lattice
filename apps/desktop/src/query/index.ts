@@ -3,8 +3,11 @@ export { queryClient, createDesktopQueryClient } from "./queryClient";
 export {
   eventsAfterSequence,
   formatKernelfsLifecycleLabel,
+  initialHydrateSequence,
   isKernelfsLifecycleEventType,
   projectAgentRunEvents,
+  spatialPayloadsAfterSequence,
+  type AgentRunHydrateCursor,
   type AgentRunLifecycleRow,
   type AgentRunProjection,
 } from "./agentRunProjection";

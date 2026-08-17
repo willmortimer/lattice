@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef } from "react";
 
 import type { AgentRunStatus } from "../lib/agentRunEvents";
 import {
-  eventsAfterSequence,
-  isKernelfsLifecycleEventType,
+  initialHydrateSequence,
   projectAgentRunEvents,
+  spatialPayloadsAfterSequence,
+  type AgentRunHydrateCursor,
   type AgentRunProjection,
 } from "../query/agentRunProjection";
 import { useAgentRunEventsQuery } from "../query/useAgentRunEventsQuery";
@@ -45,7 +46,7 @@ export function useAgentRunWorkbenchModel(
     });
   }, [eventsResult]);
 
-  const hydrateCursorRef = useRef<{ runId: string; afterSequence: number } | null>(null);
+  const hydrateCursorRef = useRef<AgentRunHydrateCursor | null>(null);
 
   useEffect(() => {
     if (!runId || !eventsResult) {
@@ -54,14 +55,11 @@ export function useAgentRunWorkbenchModel(
 
     if (hydrateCursorRef.current?.runId !== runId) {
       const hasLiveTrail = trailSteps.some((step) => step.runId === runId);
-      // Live stream already populated this run — advance cursor to avoid replay.
-      const initialSequence = hasLiveTrail
-        ? Math.max(
-            eventsResult.run.lastSequence,
-            ...eventsResult.events.map((event) => event.eventSequence),
-            0,
-          )
-        : 0;
+      const initialSequence = initialHydrateSequence(
+        eventsResult.events,
+        eventsResult.run.lastSequence,
+        hasLiveTrail,
+      );
       hydrateCursorRef.current = { runId, afterSequence: initialSequence };
       if (hasLiveTrail) {
         return;
@@ -73,19 +71,21 @@ export function useAgentRunWorkbenchModel(
       return;
     }
 
-    const pending = eventsAfterSequence(eventsResult.events, cursor.afterSequence);
-    if (pending.length === 0) {
+    const { payloads, nextSequence } = spatialPayloadsAfterSequence(
+      eventsResult.events,
+      cursor.afterSequence,
+    );
+    if (payloads.length === 0) {
+      if (nextSequence !== cursor.afterSequence) {
+        hydrateCursorRef.current = { runId, afterSequence: nextSequence };
+      }
       return;
     }
 
-    let afterSequence = cursor.afterSequence;
-    for (const event of pending) {
-      if (!isKernelfsLifecycleEventType(event.eventType)) {
-        recordAgentEvent(event.payload);
-      }
-      afterSequence = Math.max(afterSequence, event.eventSequence);
+    for (const payload of payloads) {
+      recordAgentEvent(payload);
     }
-    hydrateCursorRef.current = { runId, afterSequence };
+    hydrateCursorRef.current = { runId, afterSequence: nextSequence };
   }, [runId, eventsResult, recordAgentEvent, trailSteps]);
 
   return { runId, status, projection };

@@ -209,6 +209,7 @@ pub async fn emit_openai_run(options: OpenaiRunOptions, events: mpsc::Sender<Age
                 workspace_id,
                 workspace_root,
                 thread_id: Some(thread_id),
+                run_id: Some(run_id.clone()),
             },
         )
         .await

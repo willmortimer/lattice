@@ -455,6 +455,7 @@ async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
         workspace_id: Some("ws-dispatch".into()),
         workspace_root: Some(workspace.path().to_string_lossy().into_owned()),
         thread_id: None,
+        run_id: None,
     };
 
     let args = json!({
@@ -524,7 +525,7 @@ async fn dispatch_run_wasi_guest_emits_lifecycle_events() {
     };
 
     Mock::given(method("POST"))
-        .and(path("/v1/agent_runs/run_lifecycle_test/events"))
+        .and(path("/v1/agent_runs/chat-run-lifecycle/events"))
         .respond_with(event_capture)
         .mount(&latticed)
         .await;
@@ -542,6 +543,7 @@ async fn dispatch_run_wasi_guest_emits_lifecycle_events() {
         workspace_id: Some("ws-dispatch".into()),
         workspace_root: Some(workspace.path().to_string_lossy().into_owned()),
         thread_id: Some("thread-lifecycle".into()),
+        run_id: Some("chat-run-lifecycle".into()),
     };
 
     let args = json!({
@@ -591,6 +593,19 @@ async fn dispatch_run_wasi_guest_emits_lifecycle_events() {
     assert_eq!(
         captured[0].get("threadId").and_then(|v| v.as_str()),
         Some("thread-lifecycle")
+    );
+    let first_payload = captured[0].get("payload").expect("payload");
+    assert_eq!(
+        first_payload.get("kernelfsRunId").and_then(|v| v.as_str()),
+        Some("run_lifecycle_test")
+    );
+    assert_eq!(
+        first_payload.get("chatRunId").and_then(|v| v.as_str()),
+        Some("chat-run-lifecycle")
+    );
+    assert_eq!(
+        first_payload.get("runId").and_then(|v| v.as_str()),
+        Some("run_lifecycle_test")
     );
 }
 

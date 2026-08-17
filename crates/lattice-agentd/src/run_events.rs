@@ -28,14 +28,8 @@ pub enum KernelfsLifecycleStage {
     Hydrating { input_count: usize },
     Ready,
     Executing,
-    OutputAvailable {
-        exit_code: i32,
-        draft_count: usize,
-    },
-    Failed {
-        kind: String,
-        message: String,
-    },
+    OutputAvailable { exit_code: i32, draft_count: usize },
+    Failed { kind: String, message: String },
 }
 
 /// Collect lifecycle stages from a sync WASI host path; flush async after join.
@@ -57,19 +51,20 @@ impl KernelfsLifecycleCollector {
     }
 
     pub fn drain(&self) -> Vec<KernelfsLifecycleStage> {
-        std::mem::take(
-            &mut *self
-                .stages
-                .lock()
-                .expect("lifecycle collector poisoned"),
-        )
+        std::mem::take(&mut *self.stages.lock().expect("lifecycle collector poisoned"))
     }
 }
 
-/// Binding for durable KernelFS run events (distinct from the agent chat run id).
+/// Binding for durable KernelFS run events.
+///
+/// Events append to [`Self::chat_run_id`] (the agent protocol run) so the
+/// workbench can list chat spatial rows and KernelFS lifecycle together.
+/// [`Self::kernelfs_run_id`] stays the execution/lease id and is copied onto
+/// each payload as `kernelfsRunId`.
 #[derive(Debug, Clone)]
 pub struct KernelfsLifecycleContext {
     pub kernelfs_run_id: String,
+    pub chat_run_id: String,
     pub thread_id: String,
     pub workspace_id: Option<String>,
     pub workspace_root: Option<String>,
@@ -93,21 +88,22 @@ impl KernelfsLifecycleEmitter {
         &self.ctx
     }
 
+    /// Durable log id used in `POST /v1/agent_runs/{id}/events`.
+    pub fn append_run_id(&self) -> &str {
+        &self.ctx.chat_run_id
+    }
+
     pub async fn emit_stage(&self, stage: KernelfsLifecycleStage) {
         match stage {
             KernelfsLifecycleStage::Created => self.created().await,
-            KernelfsLifecycleStage::Hydrating { input_count } => {
-                self.hydrating(input_count).await
-            }
+            KernelfsLifecycleStage::Hydrating { input_count } => self.hydrating(input_count).await,
             KernelfsLifecycleStage::Ready => self.ready().await,
             KernelfsLifecycleStage::Executing => self.executing().await,
             KernelfsLifecycleStage::OutputAvailable {
                 exit_code,
                 draft_count,
             } => self.output_available(exit_code, draft_count).await,
-            KernelfsLifecycleStage::Failed { kind, message } => {
-                self.failed(&kind, &message).await
-            }
+            KernelfsLifecycleStage::Failed { kind, message } => self.failed(&kind, &message).await,
         }
     }
 
@@ -234,7 +230,8 @@ impl KernelfsLifecycleEmitter {
         if let Err(err) = self.emit(event_type, payload, id_suffix).await {
             tracing::warn!(
                 target: "lattice_agentd",
-                run_id = %self.ctx.kernelfs_run_id,
+                run_id = %self.ctx.chat_run_id,
+                kernelfs_run_id = %self.ctx.kernelfs_run_id,
                 event_type = %event_type,
                 error = %err,
                 "failed to append KernelFS lifecycle event"
@@ -248,6 +245,8 @@ impl KernelfsLifecycleEmitter {
         payload: Value,
         id_suffix: &str,
     ) -> Result<(), LatticeApiError> {
+        let mut payload = payload;
+        attach_join_ids(&mut payload, &self.ctx);
         let mut body = json!({
             "threadId": self.ctx.thread_id,
             "eventType": event_type,
@@ -271,9 +270,23 @@ impl KernelfsLifecycleEmitter {
             body["root"] = Value::String(root.clone());
         }
         self.client
-            .append_run_event(&self.ctx.kernelfs_run_id, body)
+            .append_run_event(self.append_run_id(), body)
             .await?;
         Ok(())
+    }
+}
+
+/// Copy chat + KernelFS ids onto lifecycle payloads for Execution UI join.
+fn attach_join_ids(payload: &mut Value, ctx: &KernelfsLifecycleContext) {
+    if let Value::Object(map) = payload {
+        map.insert(
+            "kernelfsRunId".to_string(),
+            Value::String(ctx.kernelfs_run_id.clone()),
+        );
+        map.insert(
+            "chatRunId".to_string(),
+            Value::String(ctx.chat_run_id.clone()),
+        );
     }
 }
 
@@ -288,21 +301,40 @@ fn now_ms() -> u64 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn lifecycle_context_exposes_kernelfs_run_id() {
-        let ctx = KernelfsLifecycleContext {
-            kernelfs_run_id: "run_test".into(),
+    fn test_context() -> KernelfsLifecycleContext {
+        KernelfsLifecycleContext {
+            kernelfs_run_id: "run_kf".into(),
+            chat_run_id: "run_chat".into(),
             thread_id: "thread-1".into(),
             workspace_id: Some("ws".into()),
             workspace_root: Some("/tmp/ws".into()),
             base_snapshot_id: "agentd".into(),
             backend: "wasi",
-        };
+        }
+    }
+
+    #[test]
+    fn lifecycle_context_appends_to_chat_run_id() {
         let emitter = KernelfsLifecycleEmitter::new(
             LatticeToolClient::new("http://127.0.0.1:1", "tok").expect("client"),
-            ctx,
+            test_context(),
         );
-        assert_eq!(emitter.context().kernelfs_run_id, "run_test");
+        assert_eq!(emitter.context().kernelfs_run_id, "run_kf");
+        assert_eq!(emitter.context().chat_run_id, "run_chat");
+        assert_eq!(emitter.append_run_id(), "run_chat");
+    }
+
+    #[test]
+    fn attach_join_ids_copies_chat_and_kernelfs_ids() {
+        let mut payload = json!({
+            "type": EVENT_RUN_CREATED,
+            "runId": "run_kf",
+            "timestamp": 1,
+        });
+        attach_join_ids(&mut payload, &test_context());
+        assert_eq!(payload["runId"], "run_kf");
+        assert_eq!(payload["kernelfsRunId"], "run_kf");
+        assert_eq!(payload["chatRunId"], "run_chat");
     }
 
     #[test]

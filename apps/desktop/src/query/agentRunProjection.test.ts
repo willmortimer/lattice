@@ -4,8 +4,10 @@ import type { AgentRunEventDto } from "../lib/agentRunEvents";
 import {
   eventsAfterSequence,
   formatKernelfsLifecycleLabel,
+  initialHydrateSequence,
   isKernelfsLifecycleEventType,
   projectAgentRunEvents,
+  spatialPayloadsAfterSequence,
 } from "./agentRunProjection";
 import { queryKeys } from "./keys";
 
@@ -22,69 +24,90 @@ function event(
   };
 }
 
-describe("agentRunProjection", () => {
-  it("folds chat spatial step/evidence events and KernelFS lifecycle separately", () => {
-    const projection = projectAgentRunEvents([
-      event({
-        id: "c1",
-        eventSequence: 1,
-        eventType: "step_started",
-        payload: {
-          type: "step_started",
-          runId: "run-chat-1",
-          stepId: "s1",
-          kind: "search",
-          label: "Search notes",
-        },
-      }),
-      event({
-        id: "k1",
-        eventSequence: 2,
-        eventType: "run.created",
+function joinedChatAndKernelfsLog(): AgentRunEventDto[] {
+  return [
+    event({
+      id: "c1",
+      eventSequence: 1,
+      eventType: "step_started",
+      payload: {
+        type: "step_started",
+        runId: "run-chat-1",
+        stepId: "s1",
+        kind: "search",
+        label: "Search notes",
+      },
+    }),
+    event({
+      id: "k1",
+      eventSequence: 2,
+      eventType: "run.created",
+      payload: {
+        type: "run.created",
         runId: "run-kf-1",
-        payload: { type: "run.created", runId: "run-kf-1" },
-      }),
-      event({
-        id: "c2",
-        eventSequence: 3,
-        eventType: "evidence_added",
-        payload: {
-          type: "evidence_added",
-          runId: "run-chat-1",
-          evidenceId: "e1",
-          resourceId: "r1",
-          path: "docs/a.md",
-          excerpt: "hello",
-        },
-      }),
-      event({
-        id: "k2",
-        eventSequence: 4,
-        eventType: "run.executing",
+        kernelfsRunId: "run-kf-1",
+        chatRunId: "run-chat-1",
+      },
+    }),
+    event({
+      id: "c2",
+      eventSequence: 3,
+      eventType: "evidence_added",
+      payload: {
+        type: "evidence_added",
+        runId: "run-chat-1",
+        evidenceId: "e1",
+        resourceId: "r1",
+        path: "docs/a.md",
+        excerpt: "hello",
+      },
+    }),
+    event({
+      id: "k2",
+      eventSequence: 4,
+      eventType: "run.executing",
+      payload: {
+        type: "run.executing",
         runId: "run-kf-1",
-        payload: { type: "run.executing", runId: "run-kf-1" },
-      }),
-      event({
-        id: "c3",
-        eventSequence: 5,
-        eventType: "step_completed",
-        payload: {
-          type: "step_completed",
-          runId: "run-chat-1",
-          stepId: "s1",
-          durationMs: 12,
-          summary: "Found 1",
-        },
-      }),
-      event({
-        id: "k3",
-        eventSequence: 6,
-        eventType: "run.released",
+        kernelfsRunId: "run-kf-1",
+        chatRunId: "run-chat-1",
+      },
+    }),
+    event({
+      id: "c3",
+      eventSequence: 5,
+      eventType: "step_completed",
+      payload: {
+        type: "step_completed",
+        runId: "run-chat-1",
+        stepId: "s1",
+        durationMs: 12,
+        summary: "Found 1",
+      },
+    }),
+    event({
+      id: "k3",
+      eventSequence: 6,
+      eventType: "run.released",
+      payload: {
+        type: "run.released",
         runId: "run-kf-1",
-        payload: { type: "run.released", runId: "run-kf-1" },
-      }),
-    ]);
+        kernelfsRunId: "run-kf-1",
+        chatRunId: "run-chat-1",
+      },
+    }),
+  ];
+}
 
+describe("agentRunProjection", () => {
+  it("folds chat spatial steps and KernelFS lifecycle into one projection", () => {
+    const projection = projectAgentRunEvents(joinedChatAndKernelfsLog(), {
+      runId: "run-chat-1",
+      threadId: "thread-1",
+    });
+
+    expect(projection.runId).toBe("run-chat-1");
+    expect(projection.threadId).toBe("thread-1");
     expect(projection.trailSteps).toEqual([
       {
         stepId: "s1",
@@ -111,6 +134,7 @@ describe("agentRunProjection", () => {
       "run.released",
     ]);
     expect(projection.lifecycle[0]?.label).toBe("Created");
+    expect(projection.lifecycle[0]?.kernelfsRunId).toBe("run-kf-1");
     expect(projection.lastSequence).toBe(6);
   });
 
@@ -140,6 +164,91 @@ describe("agentRunProjection", () => {
   it("formats known KernelFS lifecycle labels", () => {
     expect(formatKernelfsLifecycleLabel("run.output_available")).toBe("Output available");
     expect(formatKernelfsLifecycleLabel("run.proposal_ready")).toBe("Proposal ready");
+  });
+});
+
+describe("agent run hydrate cursor", () => {
+  it("hydrates a mid-run log without double-applying spatial events", () => {
+    const midRun: AgentRunEventDto[] = [
+      event({
+        id: "c1",
+        eventSequence: 1,
+        eventType: "step_started",
+        payload: {
+          type: "step_started",
+          runId: "run-chat-1",
+          stepId: "s1",
+          kind: "execution",
+          label: "run_wasi_guest",
+        },
+      }),
+      event({
+        id: "k1",
+        eventSequence: 2,
+        eventType: "run.created",
+        payload: {
+          type: "run.created",
+          runId: "run-kf-1",
+          kernelfsRunId: "run-kf-1",
+          chatRunId: "run-chat-1",
+        },
+      }),
+      event({
+        id: "k2",
+        eventSequence: 3,
+        eventType: "run.executing",
+        payload: {
+          type: "run.executing",
+          runId: "run-kf-1",
+          kernelfsRunId: "run-kf-1",
+          chatRunId: "run-chat-1",
+        },
+      }),
+      event({
+        id: "c2",
+        eventSequence: 4,
+        eventType: "step_completed",
+        payload: {
+          type: "step_completed",
+          runId: "run-chat-1",
+          stepId: "s1",
+          durationMs: 40,
+          summary: "Guest running",
+        },
+      }),
+    ];
+
+    // Kill-WebView stand-in: no live trail, durable log is the source of truth.
+    const afterSequence = initialHydrateSequence(midRun, 4, false);
+    expect(afterSequence).toBe(0);
+
+    const first = spatialPayloadsAfterSequence(midRun, afterSequence);
+    expect(first.payloads).toHaveLength(2);
+    expect(first.payloads.map((payload) => (payload as { type: string }).type)).toEqual([
+      "step_started",
+      "step_completed",
+    ]);
+    expect(first.nextSequence).toBe(4);
+
+    const second = spatialPayloadsAfterSequence(midRun, first.nextSequence);
+    expect(second.payloads).toEqual([]);
+    expect(second.nextSequence).toBe(4);
+
+    const projection = projectAgentRunEvents(midRun, { runId: "run-chat-1" });
+    expect(projection.trailSteps).toHaveLength(1);
+    expect(projection.lifecycle.map((row) => row.eventType)).toEqual([
+      "run.created",
+      "run.executing",
+    ]);
+  });
+
+  it("skips replay when the live trail already recorded the chat run", () => {
+    const events = joinedChatAndKernelfsLog();
+    const afterSequence = initialHydrateSequence(events, 6, true);
+    expect(afterSequence).toBe(6);
+    const batch = spatialPayloadsAfterSequence(events, afterSequence);
+    expect(batch.payloads).toEqual([]);
+    expect(batch.nextSequence).toBe(6);
   });
 });
 

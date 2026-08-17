@@ -160,6 +160,7 @@ pub async fn emit_local_run(options: LocalRunOptions, events: mpsc::Sender<Agent
                 workspace_id,
                 workspace_root,
                 thread_id: Some(thread_id),
+                run_id: Some(run_id.clone()),
             },
         )
         .await

@@ -159,6 +159,7 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
                 workspace_id,
                 workspace_root,
                 thread_id: Some(thread_id),
+                run_id: Some(run_id.clone()),
             },
         )
         .await
