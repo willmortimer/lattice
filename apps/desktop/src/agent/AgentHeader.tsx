@@ -17,30 +17,29 @@ export function AgentHeader({ onClose, workspaceRoot }: AgentHeaderProps) {
   const root = workspaceRoot?.trim() || null;
 
   return (
-    <div className="agent-panel-head-stack">
-      <header className="agent-panel-head">
+    <header className="agent-panel-head">
+      {root ? (
+        <AgentThreadHistory workspaceRoot={root} />
+      ) : (
         <div className="agent-panel-title-group">
           <span className="agent-panel-eyebrow">Workspace agent</span>
           <strong>Agent</strong>
         </div>
-        <AgentFollowControl />
-        <div className="agent-panel-provider-slot">
-          <AgentProviderBadge />
-        </div>
-        {controls?.isStreaming && (
-          <Button variant="ghost" size="sm" onClick={controls.stop}>
-            <Stop size={13} />
-            Stop
-          </Button>
-        )}
-        <IconButton label="Close agent panel" onClick={onClose}>
-          <X size={14} />
-        </IconButton>
-      </header>
-      <div className="agent-panel-layout-row">
-        <AgentLayoutToggle workspaceRoot={root} />
+      )}
+      <AgentLayoutToggle workspaceRoot={root} />
+      <AgentFollowControl />
+      <div className="agent-panel-provider-slot">
+        <AgentProviderBadge />
       </div>
-      {root ? <AgentThreadHistory workspaceRoot={root} /> : null}
-    </div>
+      {controls?.isStreaming && (
+        <Button variant="ghost" size="sm" onClick={controls.stop}>
+          <Stop size={13} />
+          Stop
+        </Button>
+      )}
+      <IconButton label="Close agent panel" onClick={onClose}>
+        <X size={14} />
+      </IconButton>
+    </header>
   );
 }

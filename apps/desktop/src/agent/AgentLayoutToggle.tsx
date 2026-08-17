@@ -1,39 +1,34 @@
-import { Button } from "@lattice/ui";
+import {
+  Button,
+  MenuItem,
+  MenuPopup,
+  MenuPortal,
+  MenuPositioner,
+  MenuRoot,
+  MenuTrigger,
+} from "@lattice/ui";
+import { CaretDown, Check } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback } from "react";
 
 import { hasTauri } from "../lib/ipc";
 import { useDesktopUiStore, type AgentLayoutMode } from "../shell/desktopUiStore";
-import {
-  readAgentDetachedHandoff,
-  writeAgentDetachedHandoff,
-  type AgentDetachedReturnLayout,
-} from "./agentDetachedHandoff";
+import { readAgentDetachedHandoff, writeAgentDetachedHandoff } from "./agentDetachedHandoff";
 import {
   AGENT_DETACHED_WINDOW_LABEL,
   requestCloseDetachedAgent,
   showDetachedAgent,
 } from "./agentDetachedWindow";
+import {
+  AGENT_LAYOUT_MODES,
+  AGENT_LAYOUT_MODE_TITLE,
+  agentLayoutModeLabel,
+  toDetachedReturnLayout,
+} from "./agentLayoutMode";
 import { useAgentSessionStore } from "./agentStore";
 
 export interface AgentLayoutToggleProps {
   workspaceRoot: string | null;
-}
-
-function toReturnLayout(mode: AgentLayoutMode): AgentDetachedReturnLayout {
-  switch (mode) {
-    case "workbench":
-      return "workbench";
-    case "focus":
-      return "focus";
-    case "dock":
-    case "detached":
-      return "dock";
-    default: {
-      const _exhaustive: never = mode;
-      return _exhaustive;
-    }
-  }
 }
 
 function isDetachedAgentWindow(): boolean {
@@ -50,12 +45,13 @@ function isDetachedAgentWindow(): boolean {
 export function AgentLayoutToggle({ workspaceRoot }: AgentLayoutToggleProps) {
   const layoutMode = useDesktopUiStore((state) => state.agentLayoutMode);
   const setLayoutMode = useDesktopUiStore((state) => state.setAgentLayoutMode);
-  const exitAgentFocus = useDesktopUiStore((state) => state.exitAgentFocus);
   const threadId = useAgentSessionStore((state) =>
     workspaceRoot ? (state.threadIds[workspaceRoot] ?? "") : "",
   );
   const inDetachedWindow = isDetachedAgentWindow();
-  const detachedActive = layoutMode === "detached" || inDetachedWindow;
+  const visibleMode: AgentLayoutMode = inDetachedWindow ? "detached" : layoutMode;
+  const detachedDisabled =
+    inDetachedWindow || !hasTauri || !workspaceRoot?.trim() || !threadId.trim();
 
   const selectMode = useCallback(
     (mode: AgentLayoutMode) => {
@@ -67,7 +63,7 @@ export function AgentLayoutToggle({ workspaceRoot }: AgentLayoutToggleProps) {
         if (handoff) {
           writeAgentDetachedHandoff({
             ...handoff,
-            returnLayoutMode: toReturnLayout(mode),
+            returnLayoutMode: toDetachedReturnLayout(mode),
           });
         }
         void requestCloseDetachedAgent();
@@ -78,7 +74,7 @@ export function AgentLayoutToggle({ workspaceRoot }: AgentLayoutToggleProps) {
         if (!hasTauri || !workspaceRoot?.trim() || !threadId.trim()) {
           return;
         }
-        const returnLayoutMode = toReturnLayout(layoutMode);
+        const returnLayoutMode = toDetachedReturnLayout(layoutMode);
         setLayoutMode("detached");
         void showDetachedAgent({
           workspaceRoot,
@@ -96,78 +92,65 @@ export function AgentLayoutToggle({ workspaceRoot }: AgentLayoutToggleProps) {
         if (handoff) {
           writeAgentDetachedHandoff({
             ...handoff,
-            returnLayoutMode: toReturnLayout(mode),
+            returnLayoutMode: toDetachedReturnLayout(mode),
           });
         }
         void requestCloseDetachedAgent();
         return;
       }
 
-      if (mode === "focus" && layoutMode === "focus") {
-        exitAgentFocus();
+      if (mode === layoutMode) {
         return;
       }
 
       setLayoutMode(mode);
     },
-    [exitAgentFocus, inDetachedWindow, layoutMode, setLayoutMode, threadId, workspaceRoot],
+    [inDetachedWindow, layoutMode, setLayoutMode, threadId, workspaceRoot],
   );
 
   return (
-    <div className="agent-layout-toggle" role="group" aria-label="Agent layout mode">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className={layoutMode === "dock" && !inDetachedWindow ? "agent-layout-toggle-active" : undefined}
-        title="Compact sidebar layout"
-        aria-pressed={layoutMode === "dock" && !inDetachedWindow}
-        onClick={() => selectMode("dock")}
-      >
-        Dock
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className={
-          layoutMode === "workbench" && !inDetachedWindow
-            ? "agent-layout-toggle-active"
-            : undefined
+    <MenuRoot>
+      <MenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="agent-layout-toggle-trigger"
+            title="Agent layout"
+            aria-label={`Agent layout, ${agentLayoutModeLabel(visibleMode)}`}
+          />
         }
-        title="Split conversation and evidence panes"
-        aria-pressed={layoutMode === "workbench" && !inDetachedWindow}
-        onClick={() => selectMode("workbench")}
       >
-        Workbench
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className={
-          layoutMode === "focus" && !inDetachedWindow ? "agent-layout-toggle-active" : undefined
-        }
-        title="Focus layout (agent fills this window)"
-        aria-pressed={layoutMode === "focus" && !inDetachedWindow}
-        onClick={() => selectMode("focus")}
-      >
-        Focus
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className={detachedActive ? "agent-layout-toggle-active" : undefined}
-        title="Open agent in a separate window"
-        aria-pressed={detachedActive}
-        disabled={
-          inDetachedWindow || !hasTauri || !workspaceRoot?.trim() || !threadId.trim()
-        }
-        onClick={() => selectMode("detached")}
-      >
-        Detached
-      </Button>
-    </div>
+        {agentLayoutModeLabel(visibleMode)}
+        <CaretDown size={10} weight="bold" />
+      </MenuTrigger>
+      <MenuPortal>
+        <MenuPositioner sideOffset={4} align="end">
+          <MenuPopup className="ltui-menu agent-layout-toggle-menu">
+            {AGENT_LAYOUT_MODES.map((mode) => {
+              const selected = mode === visibleMode;
+              return (
+                <MenuItem
+                  key={mode}
+                  className="ltui-menu-item"
+                  disabled={mode === "detached" ? detachedDisabled && !selected : false}
+                  title={AGENT_LAYOUT_MODE_TITLE[mode]}
+                  aria-checked={selected}
+                  onClick={() => {
+                    selectMode(mode);
+                  }}
+                >
+                  <span className="agent-layout-toggle-check" aria-hidden="true">
+                    {selected ? <Check size={12} weight="bold" /> : null}
+                  </span>
+                  {agentLayoutModeLabel(mode)}
+                </MenuItem>
+              );
+            })}
+          </MenuPopup>
+        </MenuPositioner>
+      </MenuPortal>
+    </MenuRoot>
   );
 }

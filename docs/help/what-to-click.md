@@ -16,7 +16,7 @@ Ignore advanced panels until you need them. Day one is these surfaces:
 | **⌘/Ctrl+K** | Search inside this workspace |
 | **⌘⇧2** | **Screen Clip** → workspace Capture Inbox |
 | **Inspect** | Properties, links, history, cloud backup for the selected item |
-| **Agent** | Workspace chat beside your files (Dock / Workbench / Focus / Detached) |
+| **Agent** | Workspace chat beside your files (header layout menu: Dock, Workbench, Focus, Detached) |
 
 You do not need a separate “power user mode.” When something needs more detail,
 open **Inspect** on that item or **Show agent** for help with the workspace.

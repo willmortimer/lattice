@@ -41,6 +41,8 @@ describe("help search filter", () => {
     expect(matches.some((page) => page.stem === "import-csv")).toBe(true);
     const agentMatches = filterHelpPages(CORPUS.pages, "agent");
     expect(agentMatches.some((page) => page.stem === "agent")).toBe(true);
+    const layoutMatches = filterHelpPages(CORPUS.pages, "layout menu");
+    expect(layoutMatches.some((page) => page.stem === "agent")).toBe(true);
     const clipMatches = filterHelpPages(CORPUS.pages, "clip");
     expect(clipMatches.some((page) => page.stem === "capture")).toBe(true);
     expect(filterHelpPages(CORPUS.pages, "zzzz-not-in-help")).toHaveLength(0);

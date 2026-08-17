@@ -1,5 +1,4 @@
 import {
-  Button,
   IconButton,
   MenuItem,
   MenuPopup,
@@ -8,15 +7,21 @@ import {
   MenuRoot,
   MenuSeparator,
   MenuTrigger,
+  PopoverPopup,
+  PopoverPortal,
+  PopoverPositioner,
+  PopoverRoot,
+  PopoverTrigger,
 } from "@lattice/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Archive,
+  CaretDown,
   DotsThree,
   MagnifyingGlass,
   PencilSimple,
-  PushPin,
   Plus,
+  PushPin,
   Trash,
 } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -38,13 +43,11 @@ import {
   type AgentThreadSummary,
 } from "../lib/agentThreads";
 import { formatAbsoluteTime, formatRelativeTime } from "../lib/relativeTime";
-import { workspaceCatalogDisplayName } from "../lib/workspaceCatalog";
 import {
   invalidateAgentThreads,
   useAgentThreadsQuery,
 } from "../query/useAgentThreadsQuery";
 import { useAgentRunActiveQuery } from "../query/useAgentRunStatusQuery";
-import { useWorkspaceCatalogQuery } from "../query/useWorkspaceCatalog";
 import { useAgentChatControls } from "./agentChatControls";
 import { useAgentSessionStore } from "./agentStore";
 import {
@@ -226,6 +229,7 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [focusIndex, setFocusIndex] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const threadId = useAgentSessionStore((state) => state.threadIds[workspaceRoot] ?? "");
@@ -243,7 +247,6 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
   const durableRunActive = durableActiveRun?.run?.status === "running";
 
   const { data: threads = [], error, isFetching } = useAgentThreadsQuery(workspaceRoot);
-  const { data: workspaceCatalog } = useWorkspaceCatalogQuery();
 
   useEffect(() => {
     if (threadListEpoch > 0) {
@@ -252,18 +255,6 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
   }, [queryClient, threadListEpoch, workspaceRoot]);
 
   const loadError = error instanceof Error ? error.message : error ? String(error) : null;
-
-  const workspaceLabel = useMemo(() => {
-    const normalizedRoot = normalizeWorkspaceRoot(workspaceRoot);
-    const entry = workspaceCatalog?.workspaces.find(
-      (workspace) => normalizeWorkspaceRoot(workspace.root) === normalizedRoot,
-    );
-    if (entry) {
-      return workspaceCatalogDisplayName(entry);
-    }
-    const parts = normalizedRoot.split("/").filter(Boolean);
-    return parts[parts.length - 1] ?? "Workspace";
-  }, [workspaceCatalog, workspaceRoot]);
 
   const allThreads = useMemo(() => {
     const options = threads.slice();
@@ -283,6 +274,17 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
     const filtered = allThreads.filter((thread) => threadMatchesQuery(thread, searchQuery));
     return sortThreadsWithPins(filtered, pinnedIds);
   }, [allThreads, pinnedIds, searchQuery]);
+
+  const currentTitle = useMemo(() => {
+    const selected = allThreads.find((thread) => thread.id === threadId);
+    if (selected) {
+      return displayTitleForThread(selected);
+    }
+    if (threadId) {
+      return displayTitleForThread({ id: threadId, title: null });
+    }
+    return "Threads";
+  }, [allThreads, threadId]);
 
   useEffect(() => {
     setFocusIndex((current) => {
@@ -373,6 +375,7 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
         });
         applySelectionAfterRemoval(thread.id);
         await invalidateAgentThreads(queryClient, workspaceRoot);
+        setPickerOpen(false);
       } catch (err) {
         setActionError(err instanceof Error ? err.message : String(err));
       }
@@ -396,6 +399,7 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
         });
         applySelectionAfterRemoval(thread.id);
         await invalidateAgentThreads(queryClient, workspaceRoot);
+        setPickerOpen(false);
       } catch (err) {
         setActionError(err instanceof Error ? err.message : String(err));
       }
@@ -474,109 +478,146 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
       : undefined;
 
   return (
-    <section className="agent-thread-browser" aria-label="Agent threads">
-      <div className="agent-thread-browser-context">
-        <span className="agent-thread-browser-eyebrow">Workspace</span>
-        <span className="agent-thread-browser-workspace" title={workspaceRoot}>
-          {workspaceLabel}
-        </span>
-      </div>
-
-      <div className="agent-thread-browser-toolbar">
-        <label className="agent-thread-browser-search">
-          <MagnifyingGlass size={13} aria-hidden="true" className="agent-thread-browser-search-icon" />
-          <input
-            type="search"
-            className="agent-thread-browser-search-input"
-            placeholder="Search threads"
-            aria-controls={listId}
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.currentTarget.value)}
-          />
-        </label>
-        <Button
-          variant="ghost"
-          size="sm"
+    <div className="agent-thread-picker">
+      <div className="agent-thread-picker-controls">
+        <PopoverRoot
+          open={pickerOpen}
+          onOpenChange={(open) => {
+            if (interactionsDisabled && open) {
+              return;
+            }
+            setPickerOpen(open);
+          }}
+        >
+          <PopoverTrigger
+            disabled={interactionsDisabled}
+            render={
+              <button
+                type="button"
+                className="agent-thread-picker-trigger"
+                aria-label={`Threads, ${currentTitle}`}
+              />
+            }
+          >
+            <span className="agent-panel-eyebrow">Workspace agent</span>
+            <strong>
+              <span className="agent-thread-picker-title">{currentTitle}</span>
+              <CaretDown size={10} weight="bold" />
+            </strong>
+          </PopoverTrigger>
+          <PopoverPortal>
+            <PopoverPositioner side="bottom" align="start" sideOffset={6}>
+              <PopoverPopup className="ltui-popover agent-thread-picker-popup">
+                <div className="agent-thread-browser-toolbar">
+                  <label className="agent-thread-browser-search">
+                    <MagnifyingGlass
+                      size={13}
+                      aria-hidden="true"
+                      className="agent-thread-browser-search-icon"
+                    />
+                    <input
+                      type="search"
+                      className="agent-thread-browser-search-input"
+                      placeholder="Search threads"
+                      aria-controls={listId}
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                      onKeyDown={(event) => {
+                        event.stopPropagation();
+                      }}
+                    />
+                  </label>
+                </div>
+                <div
+                  ref={listRef}
+                  id={listId}
+                  className="agent-thread-browser-list agent-thread-browser-list-virtual"
+                  role="listbox"
+                  aria-label="Thread list"
+                  aria-activedescendant={activeDescendant}
+                  tabIndex={visibleThreads.length === 0 ? -1 : 0}
+                  onKeyDown={onListKeyDown}
+                >
+                  {visibleThreads.length === 0 ? (
+                    <div className="agent-thread-browser-empty" role="status">
+                      {searchQuery.trim() ? "No matching threads" : "No threads yet"}
+                    </div>
+                  ) : (
+                    <div
+                      className="agent-thread-browser-virtual-spacer"
+                      style={{ height: virtualizer.getTotalSize() }}
+                    >
+                      {virtualItems.map((item) => {
+                        const thread = visibleThreads[item.index]!;
+                        return (
+                          <div
+                            key={item.key}
+                            className="agent-thread-browser-virtual-row"
+                            data-index={item.index}
+                            ref={virtualizer.measureElement}
+                            style={{
+                              transform: `translateY(${item.start}px)`,
+                            }}
+                          >
+                            <AgentThreadRow
+                              thread={thread}
+                              selected={thread.id === threadId}
+                              focused={item.index === focusIndex}
+                              pinned={pinnedIds.includes(thread.id)}
+                              isActiveRun={
+                                thread.id === threadId && (isStreaming || durableRunActive)
+                              }
+                              disabled={interactionsDisabled}
+                              onSelect={() => {
+                                if (thread.id !== threadId) {
+                                  selectThreadId(workspaceRoot, thread.id);
+                                }
+                                setPickerOpen(false);
+                              }}
+                              onTogglePin={() => {
+                                togglePinnedThread(workspaceRoot, thread.id);
+                              }}
+                              onRename={() => {
+                                void handleRenameThread(thread);
+                              }}
+                              onArchive={() => {
+                                void handleArchiveThread(thread);
+                              }}
+                              onDelete={() => {
+                                void handleDeleteThread(thread);
+                              }}
+                              onFocusRow={() => {
+                                setFocusIndex(item.index);
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                {isFetching && !loadError ? (
+                  <p className="agent-thread-browser-status" role="status" aria-live="polite">
+                    Refreshing threads…
+                  </p>
+                ) : null}
+              </PopoverPopup>
+            </PopoverPositioner>
+          </PopoverPortal>
+        </PopoverRoot>
+        <IconButton
+          label="New thread"
           className="agent-thread-browser-new"
           disabled={interactionsDisabled}
           onClick={() => {
             startNewThread(workspaceRoot);
             setSearchQuery("");
+            setPickerOpen(false);
           }}
         >
           <Plus size={13} />
-          New
-        </Button>
+        </IconButton>
       </div>
-
-      <div
-        ref={listRef}
-        id={listId}
-        className="agent-thread-browser-list agent-thread-browser-list-virtual"
-        role="listbox"
-        aria-label="Thread list"
-        aria-activedescendant={activeDescendant}
-        tabIndex={visibleThreads.length === 0 ? -1 : 0}
-        onKeyDown={onListKeyDown}
-      >
-        {visibleThreads.length === 0 ? (
-          <div className="agent-thread-browser-empty" role="status">
-            {searchQuery.trim() ? "No matching threads" : "No threads yet"}
-          </div>
-        ) : (
-          <div
-            className="agent-thread-browser-virtual-spacer"
-            style={{ height: virtualizer.getTotalSize() }}
-          >
-            {virtualItems.map((item) => {
-              const thread = visibleThreads[item.index]!;
-              return (
-                <div
-                  key={item.key}
-                  className="agent-thread-browser-virtual-row"
-                  data-index={item.index}
-                  ref={virtualizer.measureElement}
-                  style={{
-                    transform: `translateY(${item.start}px)`,
-                  }}
-                >
-                  <AgentThreadRow
-                    thread={thread}
-                    selected={thread.id === threadId}
-                    focused={item.index === focusIndex}
-                    pinned={pinnedIds.includes(thread.id)}
-                    isActiveRun={
-                      thread.id === threadId && (isStreaming || durableRunActive)
-                    }
-                    disabled={interactionsDisabled}
-                    onSelect={() => {
-                      if (thread.id !== threadId) {
-                        selectThreadId(workspaceRoot, thread.id);
-                      }
-                    }}
-                    onTogglePin={() => {
-                      togglePinnedThread(workspaceRoot, thread.id);
-                    }}
-                    onRename={() => {
-                      void handleRenameThread(thread);
-                    }}
-                    onArchive={() => {
-                      void handleArchiveThread(thread);
-                    }}
-                    onDelete={() => {
-                      void handleDeleteThread(thread);
-                    }}
-                    onFocusRow={() => {
-                      setFocusIndex(item.index);
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
       {loadError ? (
         <p className="agent-thread-browser-error" role="status">
           History unavailable
@@ -587,11 +628,6 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
           {actionError}
         </p>
       ) : null}
-      {isFetching && !loadError ? (
-        <p className="agent-thread-browser-status" role="status" aria-live="polite">
-          Refreshing threads…
-        </p>
-      ) : null}
-    </section>
+    </div>
   );
 }
