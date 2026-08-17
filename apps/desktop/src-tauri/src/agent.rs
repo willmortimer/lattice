@@ -142,13 +142,8 @@ fn discover_agentd_bin() -> Option<String> {
             return Some(candidate.to_string_lossy().into());
         }
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let sidecar = dir.join("lattice-agentd");
-            if sidecar.is_file() {
-                return Some(sidecar.to_string_lossy().into());
-            }
-        }
+    if let Some(sidecar) = crate::daemon_session::current_exe_sibling("lattice-agentd") {
+        return Some(sidecar.to_string_lossy().into());
     }
     None
 }

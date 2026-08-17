@@ -1,6 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
-    "targets": "nsis"
+    "targets": "nsis",
+    "externalBin": [
+      "sidecars/latticed",
+      "sidecars/lattice-agentd",
+      "sidecars/lattice-embed-host"
+    ]
   }
 }

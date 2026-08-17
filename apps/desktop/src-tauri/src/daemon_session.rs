@@ -82,10 +82,13 @@ fn default_run_dir() -> PathBuf {
 pub fn which_bin(name: &str) -> std::io::Result<PathBuf> {
     let path = std::env::var_os("PATH")
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "PATH not set"))?;
+    let candidates = binary_name_candidates(name);
     for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(name);
-        if candidate.is_file() {
-            return Ok(candidate);
+        for candidate_name in &candidates {
+            let candidate = dir.join(candidate_name);
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
         }
     }
     Err(std::io::Error::new(
@@ -98,8 +101,25 @@ pub fn which_bin(name: &str) -> std::io::Result<PathBuf> {
 pub fn current_exe_sibling(name: &str) -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?;
-    let candidate = dir.join(name);
-    candidate.is_file().then_some(candidate)
+    binary_name_candidates(name)
+        .into_iter()
+        .map(|candidate| dir.join(candidate))
+        .find(|path| path.is_file())
+}
+
+fn binary_name_candidates(name: &str) -> Vec<String> {
+    #[cfg(windows)]
+    {
+        if name.rsplit_once('.').is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("exe")) {
+            vec![name.to_string()]
+        } else {
+            vec![format!("{name}.exe"), name.to_string()]
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        vec![name.to_string()]
+    }
 }
 
 pub fn resolve_latticed_bin() -> Option<PathBuf> {
@@ -112,7 +132,7 @@ pub fn resolve_latticed_bin() -> Option<PathBuf> {
     if let Ok(path) = which_bin("latticed") {
         return Some(path);
     }
-    // Finder-launched .app: helpers live beside lattice-desktop in Contents/MacOS.
+    // Packaged desktop: helpers live beside the main exe (NSIS/macOS Contents/MacOS).
     if let Some(path) = current_exe_sibling("latticed") {
         return Some(path);
     }
@@ -122,7 +142,18 @@ pub fn resolve_latticed_bin() -> Option<PathBuf> {
         PathBuf::from("target/debug/latticed"),
         PathBuf::from("target/release/latticed"),
     ];
-    candidates.into_iter().find(|p| p.is_file())
+    candidates
+        .into_iter()
+        .flat_map(|path| {
+            binary_name_candidates(
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("latticed"),
+            )
+            .into_iter()
+            .map(move |name| path.with_file_name(name))
+        })
+        .find(|p| p.is_file())
 }
 
 /// Wait until the daemon endpoint accepts connections (not filesystem presence on Windows).
@@ -354,6 +385,19 @@ mod tests {
         assert_eq!(
             auth_token_path(&socket),
             PathBuf::from("/tmp/Lattice/run/latticed.token")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_binary_candidates_prefer_exe_suffix() {
+        assert_eq!(
+            binary_name_candidates("latticed"),
+            vec!["latticed.exe".to_string(), "latticed".to_string()]
+        );
+        assert_eq!(
+            binary_name_candidates("latticed.exe"),
+            vec!["latticed.exe".to_string()]
         );
     }
 

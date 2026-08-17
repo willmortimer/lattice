@@ -65,14 +65,16 @@ PowerShell scripts under `scripts/windows/` mirror the macOS release leaves in
 | `build-sidecar.ps1` | Release-build `latticed`, `lattice-agentd`, `lattice-embed-host` (`--features llama-cpp`) |
 | `verify-sidecars.ps1` | Assert sidecars exist; embed-host lists `fake` and `llama-cpp` |
 | `bench-embed-llama.ps1` | Time `lattice-embed-host` llama-cpp query embeds; prints dims + p50/p95 |
-| `assemble-app.ps1` | Copy sidecars beside `Lattice.exe` (called from `tauri-bundle`) |
+| `assemble-app.ps1` | Copy sidecars beside the desktop exe **and** stage `src-tauri/sidecars/*-x86_64-pc-windows-msvc.exe` for Tauri `externalBin` |
 | `tauri-bundle.ps1` | `tauri build --no-bundle --target …` → assemble → `tauri bundle --bundles nsis --target …` (assemble must not `exit`, or NSIS is skipped) |
 | `tauri-bundle-demo.ps1` | Same as `tauri-bundle`, but merges `tauri.windows.demo.conf.json` and ships `Lattice-FirstLook.cmd` (`LATTICE_SEED_FIRST_LOOK=1`) |
 
 Windows sidecars **exclude** seatbelt and FluidAudio/ASR. `lattice-embed-host` is built
 with **llama-cpp** (CPU on Windows; Metal feature is a no-op). The ~640MB GGUF is **not**
-shipped in NSIS — Settings → Enable downloads it. `ensure-toolchain` warns if `cmake`
-is missing (required to compile llama.cpp).
+shipped in NSIS — Settings → Enable downloads it. NSIS installs `latticed`,
+`lattice-agentd`, and `lattice-embed-host` beside the desktop exe via
+`bundle.externalBin` (see `tauri.windows.conf.json`). `ensure-toolchain` installs
+LLVM/`libclang` when missing (required to compile llama.cpp bindgen).
 Authenticode signing is deferred — installers are unsigned.
 
 Output (when `CARGO_TARGET_DIR=D:\lattice-target\windows-msvc`):

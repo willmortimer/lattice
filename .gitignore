@@ -18,6 +18,8 @@ site/src/generated/
 
 # Tauri
 apps/desktop/src-tauri/gen/
+# Staged Windows NSIS externalBin inputs (copied by assemble-app.ps1).
+apps/desktop/src-tauri/sidecars/*.exe
 
 # Nix / direnv
 .direnv/
