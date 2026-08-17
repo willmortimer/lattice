@@ -1,0 +1,637 @@
+# Lattice contracts and open formats (full)
+
+> Concatenated agent reference. Human docs: https://lattice-notes.com/docs/
+> Index: https://lattice-notes.com/llms.txt
+
+
+---
+
+<!-- source: docs/contracts/formats.md -->
+---
+title: Format support
+description: What Lattice supports each document and data format for — shipped vs near-roadmap.
+---
+
+# Format support
+
+Lattice chooses a format according to the work. This matrix is the **public**
+support table. Near-roadmap rows stay unchecked on purpose.
+
+Legend: **[x] Shipped** · **[ ] Near** · omitted = later / not a public promise
+
+## Narrative and documents
+
+| Format | Role in Lattice | Shipped | Near |
+| --- | --- | --- | --- |
+| Markdown (CommonMark/GFM) | First-class page | [x] | |
+| YAML front matter | Page metadata | [x] | |
+| Plain text / source code | Ordinary editable files | [x] | |
+| PDF | Fixed-layout open / export | [x] | |
+| HTML | Import/export and artifacts | [x] | |
+| DOCX | Structural import/export | | [ ] |
+| ODT | Structural import/export | | [ ] |
+| EPUB | Import/export / publish | | [ ] |
+| Typst / LaTeX | Precision publish | | [ ] |
+
+## Spatial and diagrams
+
+| Format | Role in Lattice | Shipped | Near |
+| --- | --- | --- | --- |
+| JSON Canvas (+ Lattice profile) | First-class canvas | [x] | |
+| SVG | Vector image / diagram | [x] | |
+| Mermaid | Diagram in docs and pages | [x] | |
+| Graphviz DOT | Graph layout | | [ ] |
+| Excalidraw interchange | Compatibility import/export | | [ ] |
+
+## Tables and spreadsheets
+
+| Format | Role in Lattice | Shipped | Near |
+| --- | --- | --- | --- |
+| SQLite `.data` package | First-class mutable data app | [x] | |
+| CSV / TSV | Import into data; bounded preview | [x] | |
+| JSON / JSONL | Structured interchange | [x] | |
+| XLSX | Spreadsheet import into data | | [ ] |
+| ODS | Open spreadsheet interchange | | [ ] |
+
+## Analytics and notebooks
+
+| Format | Role in Lattice | Shipped | Near |
+| --- | --- | --- | --- |
+| Parquet dataset | First-class analytical dataset | [x] | |
+| DuckDB queries over local files | Local analytics | [x] | |
+| Jupyter `.ipynb` | First-class notebook | [x] | |
+| Vega-Lite | First-class saved chart | [x] | |
+| Arrow IPC / Feather | Columnar interchange | | [ ] |
+
+## Apps, tasks, docs projects
+
+| Format | Role in Lattice | Shipped | Near |
+| --- | --- | --- | --- |
+| Artifact package (HTML/CSS/JS) | Portable mini-app | [x] | |
+| Task package | Repeatable local work | [x] | |
+| Docs project (`docs.lattice.yaml`) | Folder → docs site | | [ ] |
+| Deck package | Slide/export surface | [x] | |
+
+## How to read “role”
+
+| Role | Meaning |
+| --- | --- |
+| First-class | Native Lattice resource with viewer + command support |
+| Import into data | Lands in a `.data` (or similar) resource; not a spreadsheet engine |
+| Ordinary file | Opened as a file; no proprietary wrapper required |
+| Interchange | Import/export or linked compatibility, not the canonical editor format |
+
+Canonical folder layouts live under the open formats pack
+([`/open/`](/open/) on the docs site, or [`open/`](./open/) in this tree).
+Engineering inventory in the public client repo:
+`docs/37-capability-and-format-registry.md` (broader than this public table).
+
+---
+
+<!-- source: docs/contracts/integrations.md -->
+---
+title: Integrations and plugins
+description: Public support matrix for connectors, plugins, and external tools.
+---
+
+# Integrations and plugins
+
+Public matrix of how Lattice meets other tools. Near-roadmap rows stay
+unchecked.
+
+Legend: **[x] Shipped** · **[ ] Near**
+
+## Local tools and editors
+
+| Integration | Support | Status |
+| --- | --- | --- |
+| Finder / file managers | Workspace is an ordinary folder | [x] Shipped |
+| Git | Version textual resources and manifests | [x] Shipped |
+| VS Code / external editors | Edit Markdown, YAML, JSON, code in place | [x] Shipped |
+| Terminal / scripts | CLI + task packages | [x] Shipped |
+
+## Agent and API surfaces
+
+| Integration | Support | Status |
+| --- | --- | --- |
+| MCP (local daemon) | Inspect + propose tools | [x] Shipped |
+| Localhost HTTP API | Same executor family as MCP | [x] Shipped |
+| Embedded desktop agent | Proposal workflow in-app | [x] Shipped |
+| Hosted cloud MCP JSON-RPC + OAuth AS | DCR, PKCE, browser consent on Lattice Cloud | [x] Shipped (server) |
+| Claude Desktop remote connector packaged | End-user connector setup in Claude | [ ] Near |
+
+## Data and notebooks
+
+| Integration | Support | Status |
+| --- | --- | --- |
+| CSV import into `.data` | Table onboarding | [x] Shipped |
+| DuckDB over Parquet/CSV | Local analytics | [x] Shipped |
+| Jupyter / Pyodide / uv tasks | Notebooks and local compute | [x] Shipped |
+| Pandoc-backed office import | DOCX/ODT/EPUB paths | [ ] Near |
+
+## Cloud and hosting (product)
+
+| Integration | Support | Status |
+| --- | --- | --- |
+| Optional Lattice account / sync | Additive; folder remains canonical | [ ] Near |
+| S3-compatible blobs (product path) | Large object storage | [ ] Near |
+| GitHub connected repos | Read-only extracts / connectors | [ ] Near |
+
+## Plugin model
+
+| Capability | Status |
+| --- | --- |
+| Documented capability packs | [ ] Near |
+| WASI component plugin runtime as public extension point | [ ] Near |
+| Third-party connector marketplace | Later (omitted from near matrix) |
+
+## Rules
+
+1. An integration listed as **Near** is not a ship promise for a specific date.
+2. Do not invent proprietary interchange when an open format already fits.
+3. Connectors that write must respect proposal / permission policy.
+
+See also [Format support](/docs/formats-support/) and the open formats pack
+([`/open/`](/open/) on the docs site).
+
+---
+
+<!-- source: docs/contracts/cli.md -->
+---
+title: CLI contract
+description: Public lattice CLI surface for humans and agents.
+---
+
+# CLI contract
+
+The `lattice` CLI talks to the same semantic command core as the desktop app.
+Treat this page as the public contract summary. Command help (`lattice --help`,
+`lattice <command> --help`) is authoritative for flags on a given build.
+
+## Status
+
+| Area | Status |
+| --- | --- |
+| Workspace init / info / ls / validate | [x] Shipped |
+| Page create / update / search / backlinks | [x] Shipped |
+| Table create / import / show / views | [x] Shipped |
+| Record insert / update / delete | [x] Shipped |
+| History / undo-compatible journal inspection | [x] Shipped |
+| Dataset query helpers | [x] Shipped |
+| Publish export (page / interface / artifact / deck) | [x] Shipped |
+| Daemon attach helpers | [x] Shipped |
+| Full workflow authoring from CLI only | [ ] Near |
+| Cloud account management from CLI | [ ] Near |
+
+## Everyday examples
+
+```sh
+lattice init ~/Work/Research --title "Research" --template research
+cd ~/Work/Research
+lattice info
+lattice ls
+lattice validate
+
+lattice page create Notes/Idea.md --content "# Idea"
+lattice search "idea"
+lattice table create CRM.data --title "CRM" --table contacts
+lattice table import --csv contacts.csv --name CRM --table contacts
+```
+
+## Rules agents should follow
+
+1. Prefer commands that create **proposals** when mutating shared workspaces.
+2. Do not assume network or cloud features are available.
+3. Treat the workspace directory as the source of truth; do not invent a shadow
+   document store.
+4. When unsure about a flag, run `--help` for that build rather than guessing.
+
+## Related
+
+- [MCP contract](/docs/mcp/)
+- [HTTP API contract](/docs/api/)
+- Open formats pack: [`/open/`](/open/)
+
+---
+
+<!-- source: docs/contracts/mcp.md -->
+---
+title: MCP contract
+description: Public Model Context Protocol surface for Lattice workspaces.
+---
+
+# MCP contract
+
+Lattice exposes workspace tools over MCP so external agents can inspect and
+propose changes under the same authority model as the CLI and desktop app.
+
+## Status
+
+| Area | Status |
+| --- | --- |
+| Local stdio MCP via daemon (`latticed mcp`) | [x] Shipped |
+| Read / search / schema / profile tools | [x] Shipped |
+| Proposal creation and inspection | [x] Shipped |
+| Shared executor with localhost API | [x] Shipped |
+| Cloud MCP JSON-RPC + OAuth AS (DCR, PKCE, consent) | [x] Shipped (server) |
+| Cursor / Claude Desktop stdio install (`latticed mcp --print-client-config`) | [x] Shipped |
+| Rich UI tool result components for every tool | [ ] Near |
+
+## Authority rules
+
+1. Local workspace authority stays with the user machine and daemon policy.
+2. Mutations from agents should land as **proposals** unless an explicit
+   approved path says otherwise.
+3. Do not treat MCP as a bypass around Inspect, history, or permissions.
+
+## Typical client shape
+
+Generate a ready-to-paste `mcpServers` block with the absolute path of the
+`latticed` binary you invoked:
+
+```sh
+latticed mcp --print-client-config --client cursor
+latticed mcp --print-client-config --client claude-desktop
+```
+
+`--client` is required (`cursor` or `claude-desktop`). The JSON `command` is the
+absolute `latticed` path. `env.LATTICE_AUTH_TOKEN` is included only if that env
+var is already set in your shell. This command prints JSON to stdout and does
+**not** start the MCP server.
+
+**Cursor:** merge the output into project `.cursor/mcp.json` or Cursor user MCP
+settings.
+
+**Claude Desktop:** merge into `claude_desktop_config.json` (macOS:
+`~/Library/Application Support/Claude/claude_desktop_config.json`; Windows:
+`%APPDATA%\Claude\claude_desktop_config.json`).
+
+This is **stdio install wiring**, not a packaged connector from the Claude
+Desktop extension store or a DXT/mcpb bundle.
+
+## Tool categories (public)
+
+| Category | Intent |
+| --- | --- |
+| Read | Fetch pages, records, schemas, bounded samples |
+| Search | Full-text / structured find within the open workspace |
+| Propose | Create reviewable change proposals |
+| Inspect proposals | List / get proposal payloads |
+| Docs | `workspace.get_lattice_docs` returns public contract / open-format Markdown |
+
+Tool names evolve; clients should discover the live tool list from the MCP
+server rather than hard-coding a private inventory.
+
+## Docs resources (public contracts)
+
+When the server advertises the MCP **resources** capability, public docs are
+also listed as read-only URIs:
+
+| URI | Content |
+| --- | --- |
+| `lattice://docs/index` | Topic index |
+| `lattice://docs/cli` | CLI contract |
+| `lattice://docs/mcp` | This MCP contract |
+| `lattice://docs/api` | HTTP API contract |
+| `lattice://docs/formats` | Format support matrix |
+| `lattice://docs/integrations` | Integrations matrix |
+| `lattice://docs/open/{page,…}` | Open format folder layouts |
+
+Clients that under-use resources can call **`workspace.get_lattice_docs`** with
+the same topic ids (or an empty/`list` topic for the catalog). Same Markdown
+either way.
+Online mirrors: [`/open/`](/open/), [`llms.txt`](/llms.txt),
+[`llms-full.txt`](/llms-full.txt).
+
+## Related
+
+- [CLI contract](/docs/cli-contract/)
+- [HTTP API contract](/docs/api/)
+- [Integrations](/docs/integrations/)
+
+---
+
+<!-- source: docs/contracts/api.md -->
+---
+title: HTTP API contract
+description: Localhost HTTP API shared with MCP and desktop bridges.
+---
+
+# HTTP API contract
+
+Lattice provides a local HTTP API for programmatic access to the open
+workspace. MCP and several desktop bridges share the same executor path.
+
+## Status
+
+| Area | Status |
+| --- | --- |
+| Local authenticated HTTP for the open workspace | [x] Shipped |
+| Read / search / context builders | [x] Shipped |
+| Proposal endpoints | [x] Shipped |
+| Versioned OpenAPI publish on the docs site | [ ] Near |
+| Hosted multi-tenant public API | [ ] Near |
+
+## Rules
+
+1. Default assumption: **loopback only**, tied to a running daemon/session.
+2. Do not publish the local API port to the public internet.
+3. Prefer the same semantic commands as the CLI (`page.*`, `dataset.*`, …).
+4. Agents should prefer proposal endpoints for writes.
+
+## Discovery
+
+Until the OpenAPI document is published on the docs site, treat the daemon’s
+live route table and the public client docs in `lattice` as the engineering
+source. This page is the stable *product* contract summary.
+
+## Related
+
+- [CLI contract](/docs/cli-contract/)
+- [MCP contract](/docs/mcp/)
+- Open formats: [`/open/`](/open/)
+
+---
+
+<!-- source: docs/contracts/open/README.md -->
+# Open formats pack
+
+Stable, public descriptions of Lattice workspace layouts and resource packages.
+Intended to be:
+
+- Google-indexed on the docs site (`/open/...`)
+- Listed from `llms.txt` for LLM/browser agents
+- Embeddable in MCP / agent skills
+- Fetchable without reading private umbrella docs
+
+## Rules
+
+1. Keep specs short and structural. Link to deeper public engineering docs when
+   needed; do not paste private ADR debate.
+2. Prefer examples that are valid on disk.
+3. Version breaking layout changes explicitly.
+4. Unknown fields in manifests should be preserved by compliant tools.
+
+## Pack index
+
+| Path | Resource |
+| --- | --- |
+| [workspace/](./workspace/) | Workspace root convention |
+| [page/](./page/) | Markdown pages |
+| [canvas/](./canvas/) | JSON Canvas + Lattice profile |
+| [data/](./data/) | SQLite data app package |
+| [dataset/](./dataset/) | Parquet analytical dataset |
+| [notebook/](./notebook/) | Jupyter notebook |
+| [chart/](./chart/) | Vega-Lite chart |
+| [artifact/](./artifact/) | HTML/CSS/JS artifact |
+| [task/](./task/) | Task package |
+| [docs-project/](./docs-project/) | Docs project folder |
+
+Start from [`llms.txt`](./llms.txt) for a machine-oriented map.
+
+---
+
+<!-- source: docs/contracts/open/workspace/README.md -->
+# Workspace layout
+
+A Lattice workspace is an ordinary directory.
+
+## Typical root
+
+```text
+MyWorkspace/
+├── Home.md
+├── Notes/
+│   └── Idea.md
+├── Boards/
+│   └── Map.canvas
+├── CRM.data/                 # SQLite data app package
+├── Metrics.dataset/          # Parquet dataset package
+├── Analysis.ipynb
+├── Charts/
+│   └── Revenue.vl.json
+├── Tasks/
+│   └── WeeklyDigest.task/
+└── .lattice/                 # indexes, caches, journals — rebuildable / operational
+```
+
+## Rules
+
+1. User-facing resources stay outside `.lattice/` whenever possible.
+2. Relative links inside the workspace should survive moves when Lattice repairs
+   them; external tools should still use readable relative paths.
+3. Tools must not require a Lattice process to *read* Markdown, CSV, Parquet, or
+   SQLite files with standard open tooling.
+
+## Manifest (optional / evolving)
+
+Workspaces may include a small root manifest in future revisions. Until that
+ships publicly, treat the directory itself as the contract and see the format
+support matrix for status.
+
+---
+
+<!-- source: docs/contracts/open/page/README.md -->
+# Page (Markdown)
+
+Canonical narrative resource: a Markdown file, optionally with YAML front
+matter.
+
+## Example
+
+```text
+Notes/Idea.md
+```
+
+```markdown
+---
+title: Idea
+---
+
+# Idea
+
+Lattice pages are ordinary Markdown.
+```
+
+## Agent notes
+
+- Prefer UTF-8 Markdown on disk.
+- Do not wrap pages in a proprietary binary container.
+- Wiki-link and embed syntax may appear; unknown directives should degrade
+  safely when rendered outside Lattice.
+
+---
+
+<!-- source: docs/contracts/open/canvas/README.md -->
+# Canvas (JSON Canvas)
+
+Canonical spatial resource: [JSON Canvas](https://jsoncanvas.org/) plus an
+optional Lattice profile sidecar for reading order, bindings, and layout hints.
+
+## Example
+
+```text
+Boards/Map.canvas
+Boards/Map.canvas.lattice.yaml   # optional profile sidecar (when present)
+```
+
+## Agent notes
+
+- `.canvas` files should remain valid JSON Canvas for other tools.
+- Lattice-specific behavior belongs in documented profile fields, not in
+  breaking the base canvas schema.
+
+---
+
+<!-- source: docs/contracts/open/data/README.md -->
+# Data app (SQLite package)
+
+Mutable relational data lives in a directory package ending in `.data` (or an
+equivalent documented package name), with SQLite as the canonical store and
+readable manifests for views/forms/interfaces.
+
+## Example
+
+```text
+CRM.data/
+├── database.sqlite
+├── schema.sql                 # when present / exported
+├── views/
+├── forms/
+└── interfaces/
+```
+
+## Agent notes
+
+- CSV import lands *into* a data app; CSV is interchange, not the live canonical
+  spreadsheet engine.
+- Prefer schema-aware tools (SQLite, CLI table commands, MCP schema helpers)
+  over scraping UI.
+
+---
+
+<!-- source: docs/contracts/open/dataset/README.md -->
+# Dataset (Parquet)
+
+Analytical datasets are directory packages of Parquet facts (plus optional
+catalog / semantic sidecars) queried locally (DuckDB).
+
+## Example
+
+```text
+Metrics.dataset/
+├── facts/
+│   └── part-000.parquet
+└── README.md                  # optional human notes
+```
+
+## Agent notes
+
+- Prefer bounded queries and schema/profile tools over loading entire datasets
+  into chat context.
+- Treat Parquet as the durable analytical form; UI charts are views over it.
+
+---
+
+<!-- source: docs/contracts/open/notebook/README.md -->
+# Notebook (Jupyter)
+
+Canonical interactive notebook: `.ipynb` JSON.
+
+## Example
+
+```text
+Analysis.ipynb
+```
+
+## Agent notes
+
+- Preserve Jupyter notebook schema compatibility.
+- Lattice may attach environment/profile sidecars; the `.ipynb` remains the
+  portable narrative+code document.
+
+---
+
+<!-- source: docs/contracts/open/chart/README.md -->
+# Chart (Vega-Lite)
+
+Saved charts prefer Vega-Lite JSON specifications.
+
+## Example
+
+```text
+Charts/Revenue.vl.json
+```
+
+## Agent notes
+
+- Keep the spec declarative and portable.
+- Raster/SVG previews may exist beside the spec; the `.vl.json` is the editable
+  source when present.
+
+---
+
+<!-- source: docs/contracts/open/artifact/README.md -->
+# Artifact package
+
+Portable interactive mini-application: HTML/CSS/JavaScript with a manifest.
+
+## Example
+
+```text
+Reports/Pulse.artifact/
+├── index.html
+├── manifest.json
+├── styles.css
+└── app.js
+```
+
+## Agent notes
+
+- Artifacts should run as static packages when exported.
+- Host bridges for live workspace data are optional and capability-gated.
+
+---
+
+<!-- source: docs/contracts/open/task/README.md -->
+# Task package
+
+Repeatable local work with an explicit manifest and entry script.
+
+## Example
+
+```text
+Tasks/WeeklyDigest.task/
+├── task.yaml
+└── main.py
+```
+
+## Agent notes
+
+- Tasks declare runtime needs explicitly (for example Python via `uv`).
+- Prefer reading the manifest before executing anything.
+
+---
+
+<!-- source: docs/contracts/open/docs-project/README.md -->
+# Docs project
+
+A documentation project is a folder of ordinary Markdown plus a
+`docs.lattice.yaml` manifest. Lattice can preview and publish through open
+adapters (Starlight and others) without inventing a proprietary docs language.
+
+## Example
+
+```text
+docs/
+├── docs.lattice.yaml
+├── index.md
+├── guides/
+├── reference/
+└── assets/
+```
+
+## Status
+
+Docs-project as a first-class in-app resource is **near-roadmap**. The folder
+layout above is the intended public contract; see the format support matrix.

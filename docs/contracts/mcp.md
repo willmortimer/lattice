@@ -16,7 +16,8 @@ propose changes under the same authority model as the CLI and desktop app.
 | Read / search / schema / profile tools | [x] Shipped |
 | Proposal creation and inspection | [x] Shipped |
 | Shared executor with localhost API | [x] Shipped |
-| Optional cloud MCP gateway | [ ] Near |
+| Cloud MCP JSON-RPC + OAuth AS (DCR, PKCE, consent) | [x] Shipped (server) |
+| Cursor / Claude Desktop stdio install (`latticed mcp --print-client-config`) | [x] Shipped |
 | Rich UI tool result components for every tool | [ ] Near |
 
 ## Authority rules
@@ -28,19 +29,28 @@ propose changes under the same authority model as the CLI and desktop app.
 
 ## Typical client shape
 
-```json
-{
-  "mcpServers": {
-    "lattice": {
-      "command": "latticed",
-      "args": ["mcp"]
-    }
-  }
-}
+Generate a ready-to-paste `mcpServers` block with the absolute path of the
+`latticed` binary you invoked:
+
+```sh
+latticed mcp --print-client-config --client cursor
+latticed mcp --print-client-config --client claude-desktop
 ```
 
-Exact binary names and install paths vary by packaging. Prefer the documented
-desktop/daemon install for the build you are on.
+`--client` is required (`cursor` or `claude-desktop`). The JSON `command` is the
+absolute `latticed` path. `env.LATTICE_AUTH_TOKEN` is included only if that env
+var is already set in your shell. This command prints JSON to stdout and does
+**not** start the MCP server.
+
+**Cursor:** merge the output into project `.cursor/mcp.json` or Cursor user MCP
+settings.
+
+**Claude Desktop:** merge into `claude_desktop_config.json` (macOS:
+`~/Library/Application Support/Claude/claude_desktop_config.json`; Windows:
+`%APPDATA%\Claude\claude_desktop_config.json`).
+
+This is **stdio install wiring**, not a packaged connector from the Claude
+Desktop extension store or a DXT/mcpb bundle.
 
 ## Tool categories (public)
 
