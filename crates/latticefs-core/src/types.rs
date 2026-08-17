@@ -134,6 +134,26 @@ pub enum AuthorityMode {
     ImmutableImport,
 }
 
+/// Durable editing authority for a workspace resource (ADR 0057 collab amendment).
+///
+/// Distinct from [`AuthorityMode`], which records who owns canonical bytes (S4).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ResourceAuthority {
+    PlainFile,
+    Collaborative {
+        doc_id: ResourceId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        materialized_revision: Option<ResourceVersionId>,
+    },
+}
+
+impl Default for ResourceAuthority {
+    fn default() -> Self {
+        Self::PlainFile
+    }
+}
+
 /// Whether bytes are present locally and how they are retained.
 ///
 /// Device-local operational state for Inspect/CLI. Not portable LatticeFS
@@ -167,6 +187,8 @@ pub struct ResourceStat {
     pub path: String,
     pub authority: AuthorityMode,
     pub materialization: MaterializationState,
+    #[serde(default)]
+    pub resource_authority: ResourceAuthority,
     pub content_hash: Option<ContentHash>,
     pub version_id: Option<ResourceVersionId>,
     /// Hydration digests attached when a proposal with `hydrationInputs` was accepted.

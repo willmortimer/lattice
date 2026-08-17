@@ -21,5 +21,5 @@ pub use stat::{
 };
 pub use types::{
     AuthorityMode, ContentHash, HydrationInputDigest, MaterializationState, NamespaceEntry,
-    ResourceId, ResourceStat, ResourceVersionId,
+    ResourceAuthority, ResourceId, ResourceStat, ResourceVersionId,
 };

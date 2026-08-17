@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{normalize_path_key, Error, Result};
 use crate::types::{
     AuthorityMode, ContentHash, HydrationInputDigest, MaterializationState, NamespaceEntry,
-    ResourceId, ResourceStat, ResourceVersionId,
+    ResourceAuthority, ResourceId, ResourceStat, ResourceVersionId,
 };
 
 pub const OPERATIONAL_DIR: &str = ".lattice";
@@ -20,6 +20,8 @@ pub const REGISTRY_FILENAME: &str = "resource-registry.json";
 struct ResourceRecord {
     resource_id: ResourceId,
     authority: AuthorityMode,
+    #[serde(default)]
+    resource_authority: ResourceAuthority,
     /// Accepted from older registries; never serialized going forward.
     #[serde(default, skip_serializing)]
     materialization: MaterializationState,
@@ -98,6 +100,7 @@ impl NamespaceRegistry {
         let record = ResourceRecord {
             resource_id: ResourceId::new(),
             authority: AuthorityMode::Local,
+            resource_authority: ResourceAuthority::PlainFile,
             materialization: MaterializationState::Pinned,
             content_hash: None,
             version_id: None,
@@ -147,6 +150,7 @@ impl NamespaceRegistry {
             path: key,
             authority: record.authority,
             materialization: derive_materialization(record.authority),
+            resource_authority: record.resource_authority.clone(),
             content_hash: record.content_hash.clone(),
             version_id: record.version_id,
             hydration_inputs: record.hydration_inputs.clone(),
@@ -159,6 +163,21 @@ impl NamespaceRegistry {
             path: stat.path,
             resource_id: stat.resource_id,
         })
+    }
+
+    pub fn set_resource_authority(
+        &mut self,
+        path: &str,
+        resource_authority: ResourceAuthority,
+    ) -> Result<()> {
+        let key = normalize_path_key(path)?;
+        let record = self
+            .document
+            .entries
+            .get_mut(&key)
+            .ok_or_else(|| Error::ResourceNotFound { path: key.clone() })?;
+        record.resource_authority = resource_authority;
+        Ok(())
     }
 
     pub fn set_content_hash(&mut self, path: &str, content_hash: ContentHash) -> Result<()> {
@@ -359,5 +378,55 @@ mod tests {
         assert_eq!(stat.materialization, MaterializationState::MetadataOnly);
         registry.save().unwrap();
         assert!(!fs::read_to_string(registry_path).unwrap().contains("materialization"));
+    }
+
+    #[test]
+    fn legacy_registry_without_resource_authority_defaults_to_plain_file() {
+        let dir = tempdir().unwrap();
+        let registry_path = NamespaceRegistry::registry_path(dir.path());
+        fs::create_dir_all(registry_path.parent().unwrap()).unwrap();
+        let resource_id = ResourceId::new();
+        fs::write(
+            &registry_path,
+            format!(
+                r#"{{"version":1,"entries":{{"legacy.md":{{"resource_id":"{resource_id}","authority":"local"}}}}}}"#
+            ),
+        )
+        .unwrap();
+        let registry = NamespaceRegistry::open(dir.path()).unwrap();
+        let stat = registry.resource_stat("legacy.md").unwrap();
+        assert_eq!(stat.resource_authority, ResourceAuthority::PlainFile);
+    }
+
+    #[test]
+    fn set_resource_authority_collaborative_round_trips() {
+        let dir = tempdir().unwrap();
+        let mut registry = NamespaceRegistry::open(dir.path()).unwrap();
+        registry.ensure_local_file("notes/a.md").unwrap();
+        let doc_id = ResourceId::new();
+        let revision = ResourceVersionId::new();
+        registry
+            .set_resource_authority(
+                "notes/a.md",
+                ResourceAuthority::Collaborative {
+                    doc_id,
+                    materialized_revision: Some(revision),
+                },
+            )
+            .unwrap();
+        registry.save().unwrap();
+
+        let reopened = NamespaceRegistry::open(dir.path()).unwrap();
+        let stat = reopened.resource_stat("notes/a.md").unwrap();
+        assert_eq!(
+            stat.resource_authority,
+            ResourceAuthority::Collaborative {
+                doc_id,
+                materialized_revision: Some(revision),
+            }
+        );
+        let raw = fs::read_to_string(NamespaceRegistry::registry_path(dir.path())).unwrap();
+        assert!(raw.contains("collaborative"));
+        assert!(raw.contains(&doc_id.to_string()));
     }
 }
