@@ -1,14 +1,18 @@
-//! Cloud-backed Yrs remote snapshot push/pull (S8).
+//! Cloud-backed Yrs remote snapshot and append-log push/pull (S8).
 //!
-//! Uses existing workspace-scoped blob PUT/GET with a sidecar ResourceId from
-//! [`lattice_collab::collab_snapshot_resource_id`]. Local collab journal remains
-//! authoritative; remote is an opaque peer-exchange snapshot.
+//! Uses existing workspace-scoped blob PUT/GET with sidecar ResourceIds from
+//! [`lattice_collab::collab_snapshot_resource_id`] / [`lattice_collab::collab_log_resource_id`].
+//! Local collab journal remains authoritative; remote is opaque peer-exchange.
 
 use std::path::Path;
 
-use lattice_cloud_client::{default_client, CloudApiClient, CloudError, CloudHttpClient, HttpCloudClient};
+use lattice_cloud_client::{
+    default_client, CloudApiClient, CloudError, CloudHttpClient, HttpCloudClient,
+};
 use lattice_collab::{
-    collab_snapshot_resource_id, decode_remote_snapshot, encode_remote_snapshot, parse_doc_resource_id,
+    append_update, collab_log_resource_id, collab_snapshot_resource_id, decode_remote_log,
+    decode_remote_snapshot, encode_remote_log, encode_remote_snapshot, parse_doc_resource_id,
+    REMOTE_LOG_UNKNOWN_BASE_HASH,
 };
 use lattice_core::Workspace;
 use latticefs_core::ContentHash;
@@ -19,6 +23,39 @@ use crate::workspace_backup::ensure_cloud_workspace;
 
 fn map_err(err: impl std::fmt::Display) -> String {
     err.to_string()
+}
+
+fn map_collab_remote_err(err: lattice_collab::Error) -> String {
+    match err {
+        lattice_collab::Error::LogNeedsCompact {
+            update_count,
+            byte_count,
+        } => format!("log_needs_compact: {update_count} updates, {byte_count} bytes"),
+        other => other.to_string(),
+    }
+}
+
+/// Parse LYRL `base_hash`: 32 raw SHA-256 bytes, 64 ASCII hex characters, or
+/// omit/empty → [`REMOTE_LOG_UNKNOWN_BASE_HASH`].
+fn parse_base_hash(raw: Option<&[u8]>) -> Result<[u8; 32], String> {
+    match raw {
+        None | Some([]) => Ok(REMOTE_LOG_UNKNOWN_BASE_HASH),
+        Some(bytes) if bytes.len() == 32 => {
+            let mut out = [0u8; 32];
+            out.copy_from_slice(bytes);
+            Ok(out)
+        }
+        Some(bytes) if bytes.len() == 64 => {
+            let hex_str = std::str::from_utf8(bytes).map_err(map_err)?;
+            let decoded = hex::decode(hex_str.trim()).map_err(map_err)?;
+            <[u8; 32]>::try_from(decoded)
+                .map_err(|_| "base_hash hex must decode to 32 bytes".to_string())
+        }
+        Some(bytes) => Err(format!(
+            "base_hash must be 32 raw SHA-256 bytes or 64 hex characters, got {} bytes",
+            bytes.len()
+        )),
+    }
 }
 
 fn api_client() -> CloudApiClient<HttpCloudClient> {
@@ -83,8 +120,12 @@ pub fn push_collab_remote_snapshot_with_client<C: CloudHttpClient>(
 
     let workspace = Workspace::open(Path::new(root)).map_err(map_err)?;
     let manifest = workspace.manifest();
-    let cloud_workspace =
-        ensure_cloud_workspace(client, bearer, &manifest.id.to_string(), manifest.title.as_str())?;
+    let cloud_workspace = ensure_cloud_workspace(
+        client,
+        bearer,
+        &manifest.id.to_string(),
+        manifest.title.as_str(),
+    )?;
 
     let hash = client
         .put_workspace_blob(
@@ -124,8 +165,12 @@ pub fn pull_collab_remote_snapshot_with_client<C: CloudHttpClient>(
 
     let workspace = Workspace::open(Path::new(root)).map_err(map_err)?;
     let manifest = workspace.manifest();
-    let cloud_workspace =
-        ensure_cloud_workspace(client, bearer, &manifest.id.to_string(), manifest.title.as_str())?;
+    let cloud_workspace = ensure_cloud_workspace(
+        client,
+        bearer,
+        &manifest.id.to_string(),
+        manifest.title.as_str(),
+    )?;
 
     let bytes = match client.get_blob(bearer, sidecar_id) {
         Ok(bytes) => bytes,
@@ -144,6 +189,164 @@ pub fn pull_collab_remote_snapshot_with_client<C: CloudHttpClient>(
     }))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollabRemoteLogPushResult {
+    pub page_id: String,
+    pub sidecar_id: String,
+    pub cloud_workspace_id: String,
+    pub content_hash: String,
+    pub base_hash: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollabRemoteLogPullResult {
+    pub page_id: String,
+    pub sidecar_id: String,
+    pub cloud_workspace_id: String,
+    pub content_hash: String,
+    pub base_hash: Vec<u8>,
+    pub updates: Vec<Vec<u8>>,
+}
+
+/// Append one lib0 v1 update to the cloud LYRL sidecar blob for `page_resource_id`.
+///
+/// Pulls the existing log (404 → empty), runs [`append_update`], then PUTs with
+/// `If-Match` set to the pulled blob hash so concurrent peers do not clobber.
+///
+/// `base_hash` is 32 raw SHA-256 bytes of the LYRS snapshot this log is based
+/// on, 64 ASCII hex characters of that digest, or omit/empty for
+/// [`REMOTE_LOG_UNKNOWN_BASE_HASH`]. It is applied only when creating a new log;
+/// later appends keep the stored base.
+pub fn push_collab_remote_log(
+    root: &str,
+    page_resource_id: &str,
+    yrs_update: &[u8],
+    base_hash: Option<&[u8]>,
+) -> Result<CollabRemoteLogPushResult, String> {
+    let bearer = resolve_cloud_bearer_cmd()?;
+    push_collab_remote_log_with_client(
+        &api_client(),
+        &bearer,
+        root,
+        page_resource_id,
+        yrs_update,
+        base_hash,
+    )
+}
+
+pub fn push_collab_remote_log_with_client<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    bearer: &str,
+    root: &str,
+    page_resource_id: &str,
+    yrs_update: &[u8],
+    base_hash: Option<&[u8]>,
+) -> Result<CollabRemoteLogPushResult, String> {
+    let page_id = parse_doc_resource_id(page_resource_id).map_err(map_err)?;
+    let sidecar_id = collab_log_resource_id(page_id);
+
+    let workspace = Workspace::open(Path::new(root)).map_err(map_err)?;
+    let manifest = workspace.manifest();
+    let cloud_workspace = ensure_cloud_workspace(
+        client,
+        bearer,
+        &manifest.id.to_string(),
+        manifest.title.as_str(),
+    )?;
+
+    let existing = match client.get_blob(bearer, sidecar_id) {
+        Ok(bytes) => bytes,
+        Err(CloudError::Api { status: 404, .. }) => Vec::new(),
+        Err(err) => return Err(map_err(err)),
+    };
+    let if_match = if existing.is_empty() {
+        None
+    } else {
+        let hash = ContentHash::from_bytes(&existing).map_err(map_err)?;
+        Some(hash_hex(&hash))
+    };
+
+    let appended = append_update(page_id, &existing, yrs_update).map_err(map_collab_remote_err)?;
+    let payload = if existing.is_empty() {
+        let base = parse_base_hash(base_hash)?;
+        if base == REMOTE_LOG_UNKNOWN_BASE_HASH {
+            appended
+        } else {
+            encode_remote_log(page_id, base, &[yrs_update])
+        }
+    } else {
+        appended
+    };
+    let stored_base = decode_remote_log(page_id, &payload)
+        .map_err(map_collab_remote_err)?
+        .base_hash;
+
+    let hash = client
+        .put_workspace_blob(
+            bearer,
+            Some(&cloud_workspace.id),
+            sidecar_id,
+            &payload,
+            if_match.as_deref(),
+        )
+        .map_err(map_err)?;
+
+    Ok(CollabRemoteLogPushResult {
+        page_id: page_id.to_string(),
+        sidecar_id: sidecar_id.to_string(),
+        cloud_workspace_id: cloud_workspace.id,
+        content_hash: hash_hex(&hash),
+        base_hash: stored_base.to_vec(),
+    })
+}
+
+/// Pull the remote Yrs append log for `page_resource_id`, if present.
+pub fn pull_collab_remote_log(
+    root: &str,
+    page_resource_id: &str,
+) -> Result<Option<CollabRemoteLogPullResult>, String> {
+    let bearer = resolve_cloud_bearer_cmd()?;
+    pull_collab_remote_log_with_client(&api_client(), &bearer, root, page_resource_id)
+}
+
+pub fn pull_collab_remote_log_with_client<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    bearer: &str,
+    root: &str,
+    page_resource_id: &str,
+) -> Result<Option<CollabRemoteLogPullResult>, String> {
+    let page_id = parse_doc_resource_id(page_resource_id).map_err(map_err)?;
+    let sidecar_id = collab_log_resource_id(page_id);
+
+    let workspace = Workspace::open(Path::new(root)).map_err(map_err)?;
+    let manifest = workspace.manifest();
+    let cloud_workspace = ensure_cloud_workspace(
+        client,
+        bearer,
+        &manifest.id.to_string(),
+        manifest.title.as_str(),
+    )?;
+
+    let bytes = match client.get_blob(bearer, sidecar_id) {
+        Ok(bytes) => bytes,
+        Err(CloudError::Api { status: 404, .. }) => return Ok(None),
+        Err(err) => return Err(map_err(err)),
+    };
+    let decoded = decode_remote_log(page_id, &bytes).map_err(map_collab_remote_err)?;
+    let hash = ContentHash::from_bytes(&bytes).map_err(map_err)?;
+
+    Ok(Some(CollabRemoteLogPullResult {
+        page_id: page_id.to_string(),
+        sidecar_id: sidecar_id.to_string(),
+        cloud_workspace_id: cloud_workspace.id,
+        content_hash: hash_hex(&hash),
+        base_hash: decoded.base_hash.to_vec(),
+        updates: decoded.updates,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -153,7 +356,10 @@ mod tests {
         CloudApiClient, CloudError, CloudHttpBytesResponse, CloudHttpClient, CloudHttpResponse,
         WORKSPACE_ID_HEADER,
     };
-    use lattice_collab::{collab_snapshot_resource_id, encode_remote_snapshot};
+    use lattice_collab::{
+        collab_log_resource_id, collab_snapshot_resource_id, encode_remote_log,
+        encode_remote_snapshot, REMOTE_LOG_MAX_UPDATES, REMOTE_LOG_UNKNOWN_BASE_HASH,
+    };
     use lattice_core::Workspace;
     use latticefs_core::{ContentHash, ResourceId};
     use yrs::{Doc, ReadTxn, Text, Transact};
@@ -342,5 +548,130 @@ mod tests {
         )
         .unwrap();
         assert!(pulled.is_none());
+    }
+
+    #[test]
+    fn push_then_pull_log_roundtrip_via_cloud_blob() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "Demo").unwrap();
+        let page = ResourceId::new();
+        let first = make_text_update("log peer a");
+        let second = make_text_update("log peer b");
+        let base = [0xab; 32];
+
+        let http = FakeHttp::default();
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let root = dir.path().to_str().unwrap();
+        let page_str = page.to_string();
+
+        let pushed = push_collab_remote_log_with_client(
+            &client,
+            "tok",
+            root,
+            &page_str,
+            &first,
+            Some(&base),
+        )
+        .unwrap();
+        assert_eq!(pushed.page_id, page_str);
+        assert_eq!(pushed.sidecar_id, collab_log_resource_id(page).to_string());
+        assert_eq!(pushed.base_hash, base);
+
+        push_collab_remote_log_with_client(&client, "tok", root, &page_str, &second, Some(&base))
+            .unwrap();
+
+        let pulled = pull_collab_remote_log_with_client(&client, "tok", root, &page_str)
+            .unwrap()
+            .expect("log present");
+        assert_eq!(pulled.updates, vec![first, second]);
+        assert_eq!(pulled.base_hash, base);
+        assert_eq!(pulled.sidecar_id, pushed.sidecar_id);
+
+        let raw = http
+            .blobs
+            .lock()
+            .unwrap()
+            .get(&pushed.sidecar_id)
+            .cloned()
+            .unwrap();
+        assert_eq!(
+            raw,
+            encode_remote_log(
+                page,
+                base,
+                &[pulled.updates[0].as_slice(), pulled.updates[1].as_slice()]
+            )
+        );
+    }
+
+    #[test]
+    fn pull_missing_log_returns_none() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "Demo").unwrap();
+        let page = ResourceId::new();
+        let http = FakeHttp::default();
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let pulled = pull_collab_remote_log_with_client(
+            &client,
+            "tok",
+            dir.path().to_str().unwrap(),
+            &page.to_string(),
+        )
+        .unwrap();
+        assert!(pulled.is_none());
+    }
+
+    #[test]
+    fn push_log_returns_log_needs_compact_at_update_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "Demo").unwrap();
+        let page = ResourceId::new();
+        let sidecar = collab_log_resource_id(page);
+        let stubs: Vec<Vec<u8>> = (0..REMOTE_LOG_MAX_UPDATES).map(|i| vec![i as u8]).collect();
+        let refs: Vec<&[u8]> = stubs.iter().map(|u| u.as_slice()).collect();
+        let payload = encode_remote_log(page, REMOTE_LOG_UNKNOWN_BASE_HASH, &refs);
+
+        let http = FakeHttp::default();
+        http.blobs
+            .lock()
+            .unwrap()
+            .insert(sidecar.to_string(), payload);
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+
+        let err = push_collab_remote_log_with_client(
+            &client,
+            "tok",
+            dir.path().to_str().unwrap(),
+            &page.to_string(),
+            &[0xff],
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("log_needs_compact"),
+            "expected log_needs_compact in {err}"
+        );
+    }
+
+    #[test]
+    fn push_log_accepts_hex_base_hash() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "Demo").unwrap();
+        let page = ResourceId::new();
+        let update = make_text_update("hex base");
+        let hex_base = "11".repeat(32);
+        let http = FakeHttp::default();
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+
+        let pushed = push_collab_remote_log_with_client(
+            &client,
+            "tok",
+            dir.path().to_str().unwrap(),
+            &page.to_string(),
+            &update,
+            Some(hex_base.as_bytes()),
+        )
+        .unwrap();
+        assert_eq!(pushed.base_hash, vec![0x11; 32]);
     }
 }

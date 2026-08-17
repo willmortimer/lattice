@@ -51,14 +51,37 @@ snapshot and start a new log (optionally recording the snapshot content hash in
 ## Client path
 
 1. Desktop Labs toggles: collaborative page editor + remote Yrs provider.
-2. When remote is enabled and cloud is signed in, `openCollabSession` polls:
-   pull sidecar → apply to Y.Doc (and daemon journal) → push merged full state.
-   <!-- TODO(I1/YW): optional LYRL append-log poll/append alongside LYRS snapshot -->
-3. Handlers: `push_collab_remote_snapshot` / `pull_collab_remote_snapshot` in
-   `lattice-handlers` via Tauri commands.
+2. When remote is enabled and cloud is signed in, `openCollabSession` still
+   polls the **LYRS snapshot** only: pull sidecar → apply to Y.Doc (and daemon
+   journal) → push merged full state.
+   <!-- TODO(wave 2): wire `openCollabSession` to poll/append LYRL alongside LYRS -->
+3. Handlers (cloud blob PUT/GET, no new server routes):
+   - Snapshot: `push_collab_remote_snapshot` / `pull_collab_remote_snapshot`
+     (Tauri: `push_collab_remote_snapshot_cmd` / `pull_collab_remote_snapshot_cmd`).
+   - Append log: `push_collab_remote_log` / `pull_collab_remote_log`
+     (Tauri: `push_collab_remote_log_cmd` / `pull_collab_remote_log_cmd`).
+     Push pulls the existing LYRL blob (404 → empty), `append_update`, then PUT
+     with `If-Match` so two peers do not clobber. Exceeding log limits returns
+     an error string containing `log_needs_compact` (desktop compact/reset of
+     the log after writing a fresh LYRS snapshot is still TODO in
+     `openCollabSession`).
 4. Core types + in-memory stores: `lattice_collab::remote`
    (`YrsRemoteStore`, `YrsRemoteLogStore`, `encode_remote_log`,
    `decode_remote_log`, `append_update`, `collab_log_resource_id`).
+
+### `base_hash` (Tauri)
+
+`base_hash` is 32 raw SHA-256 bytes of the LYRS snapshot this log is based on,
+or 32 zero bytes (`REMOTE_LOG_UNKNOWN_BASE_HASH`) when unknown.
+
+`push_collab_remote_log_cmd` accepts an optional **hex string** (64 characters,
+no `sha256:` prefix). Omit or pass empty for the unknown-base zeros. If you
+already have the 32 raw bytes, hex-encode them before invoke
+(`hex::encode` / `Buffer.from(bytes).toString('hex')`).
+
+`pull_collab_remote_log_cmd` returns `baseHash` as a 32-byte array (serde
+`Vec<u8>`), not hex. Hex-encode that array if you need to pass it back into
+the push command. `contentHash` remains the hex digest of the LYRL blob.
 
 No new server routes required. Ecosystem sync-heads may list the sidecars as
 extra blobs; they are not materialized as workspace files.
