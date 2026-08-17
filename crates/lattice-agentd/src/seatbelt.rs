@@ -1,8 +1,12 @@
 //! macOS Seatbelt (`sandbox-exec`) isolation for WASI guest runs.
 //!
-//! On Darwin, Wasmtime executes in a child process under a deny-default profile
-//! that only allows the KernelFS run directory (plus the runner binary and
-//! minimal system paths). The parent keeps Lattice HTTP / proposal authority.
+//! On Darwin, Wasmtime executes in a child process under a **deny-default**
+//! profile that only allows the KernelFS run directory, the runner binary, and
+//! the minimum dyld/Wasmtime system paths. Network is denied. The parent keeps
+//! Lattice HTTP / proposal authority.
+//!
+//! Missing `lattice-wasi-seatbelt` is a hard error (`SeatbeltError::RunnerMissing`);
+//! the host never falls back to in-process Wasmtime while Seatbelt is enabled.
 //!
 //! Control with `LATTICE_WASI_SEATBELT` (`1`/`true` force on, `0`/`false` off).
 //! Default: on for macOS, off elsewhere. Override the child binary with
@@ -14,6 +18,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+#[cfg(test)]
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -26,6 +32,10 @@ pub const SEATBELT_ENV: &str = "LATTICE_WASI_SEATBELT";
 
 /// Env var pointing at the `lattice-wasi-seatbelt` helper binary.
 pub const SEATBELT_BIN_ENV: &str = "LATTICE_WASI_SEATBELT_BIN";
+
+/// Serializes tests that mutate Seatbelt env vars (lib tests share one process).
+#[cfg(test)]
+pub(crate) static SEATBELT_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Error)]
 pub enum SeatbeltError {
@@ -87,28 +97,36 @@ pub enum SeatbeltChildResult {
 }
 
 /// Resolve the Seatbelt child helper binary.
+///
+/// An explicit `LATTICE_WASI_SEATBELT_BIN` that is not a file fails closed
+/// (no search next to `current_exe`). Unset env still looks beside the agentd
+/// binary so a shipped sidecar install works without extra config.
 pub fn resolve_runner_bin() -> Option<PathBuf> {
-    if let Ok(path) = env::var(SEATBELT_BIN_ENV) {
-        let path = PathBuf::from(path);
-        if path.is_file() {
-            return Some(path);
+    match env::var(SEATBELT_BIN_ENV) {
+        Ok(path) => {
+            let path = PathBuf::from(path.trim());
+            if path.is_file() {
+                Some(path)
+            } else {
+                None
+            }
+        }
+        Err(_) => {
+            if let Ok(mut exe) = env::current_exe() {
+                exe.set_file_name("lattice-wasi-seatbelt");
+                if exe.is_file() {
+                    return Some(exe);
+                }
+            }
+            None
         }
     }
-    if let Ok(mut exe) = env::current_exe() {
-        exe.set_file_name("lattice-wasi-seatbelt");
-        if exe.is_file() {
-            return Some(exe);
-        }
-    }
-    None
 }
 
-/// Write a Seatbelt profile for the WASI child.
+/// Write a deny-default Seatbelt profile for the WASI child.
 ///
-/// Uses `(allow default)` + `(deny network*)` because a hard deny-default profile
-/// aborts dyld/Wasmtime on current macOS (SIGABRT). The child still runs under
-/// `sandbox-exec` with network denied; file access is further constrained by
-/// copying the wasm into `run_root/.host/` and only mounting KernelFS dirs.
+/// Each allow is the measured minimum for dyld + Wasmtime + KernelFS on current
+/// macOS. `(allow default)` SIGABRTs are not an acceptable substitute.
 pub fn write_profile(
     profile_path: &Path,
     run_root: &Path,
@@ -124,23 +142,41 @@ pub fn write_profile(
     let runner = escape_sb_path(&runner_bin);
     let profile = format!(
         r#"(version 1)
-; lattice-wasi-seatbelt — network denied; wasm + KernelFS under run root only by convention.
-(allow default)
+; lattice-wasi-seatbelt — deny-default; network denied; KernelFS run dir + dyld/Wasmtime.
+(deny default)
 (deny network*)
-(deny file-write*
-  (subpath "/Users")
-  (subpath "/Volumes")
-  (subpath "/etc")
-  (subpath "/var/root")
+; dyld stats the filesystem root inode. (subpath "/usr") does not match "/";
+; without this literal, even /usr/bin/true SIGABRTs under deny-default.
+(allow file-read* (literal "/"))
+; System libraries, frameworks, and the dyld shared cache.
+(allow file-read*
+  (subpath "/usr")
+  (subpath "/System")
+  (subpath "/Library")
+  (subpath "/private/var/db/dyld")
 )
+; Runner binary (often a user-owned cargo/target path, not under /usr).
+(allow file-read* (literal "{runner}"))
+; KernelFS run dir: job, wasm, preopens, output.
+(allow file-read* (subpath "{run}"))
+; Guest output plus OS temp (tempfile / Cranelift scratch).
 (allow file-write*
   (subpath "{run}")
-  (subpath "/private/var/folders")
   (subpath "/private/tmp")
+  (subpath "/private/var/folders")
   (subpath "/tmp")
 )
-; runner path recorded for audit / future tighten
-; runner={runner}
+; sandbox-exec applies the profile then execs the helper.
+(allow process-exec (literal "{runner}"))
+; libsystem/Wasmtime may fork worker threads' backing processes.
+(allow process-fork)
+; Rust/Wasmtime thread stack guard pages: omitting this SIGABRTs
+; ("failed to allocate a guard page") when the helper runs a WASI guest.
+(allow sysctl-read)
+; libsystem abort and signal plumbing inside the sandboxed helper.
+(allow signal)
+; dyld/libsystem mach bootstrap; deny can SIGABRT the helper on some macOS versions.
+(allow mach-lookup)
 "#
     );
     fs::write(profile_path, profile)?;
@@ -148,7 +184,10 @@ pub fn write_profile(
 }
 
 fn escape_sb_path(path: &Path) -> String {
-    path.display().to_string().replace('\\', "\\\\").replace('"', "\\\"")
+    path.display()
+        .to_string()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
 }
 
 /// Run Wasmtime in a Seatbelt child. Copies `wasm_bytes` under `run_root/.host/`.
@@ -162,12 +201,18 @@ pub fn run_wasi_in_seatbelt(
     }
 
     let runner = resolve_runner_bin().ok_or(SeatbeltError::RunnerMissing)?;
+    // Seatbelt `(subpath)` matches real paths; tempfile's `/var/folders` is a
+    // symlink to `/private/var/folders` and is denied unless canonicalized.
+    let run_root = run_root
+        .canonicalize()
+        .unwrap_or_else(|_| run_root.to_path_buf());
+    let runner = runner.canonicalize().unwrap_or_else(|_| runner);
     let host_dir = run_root.join(".host");
     fs::create_dir_all(&host_dir)?;
     let wasm_path = host_dir.join("guest.wasm");
     fs::write(&wasm_path, wasm_bytes)?;
     let profile_path = host_dir.join("seatbelt.sb");
-    write_profile(&profile_path, run_root, &runner)?;
+    write_profile(&profile_path, &run_root, &runner)?;
     let job_path = host_dir.join("job.json");
     let result_path = host_dir.join("result.json");
     let _ = fs::remove_file(&result_path);
@@ -180,9 +225,11 @@ pub fn run_wasi_in_seatbelt(
         max_wall_time_ms: options.max_wall_time.map(|d| d.as_millis() as u64),
         stdio_capture_capacity: options.stdio_capture_capacity,
     };
-    fs::write(&job_path, serde_json::to_vec_pretty(&job).map_err(|err| {
-        SeatbeltError::BadResult(format!("serialize job: {err}"))
-    })?)?;
+    fs::write(
+        &job_path,
+        serde_json::to_vec_pretty(&job)
+            .map_err(|err| SeatbeltError::BadResult(format!("serialize job: {err}")))?,
+    )?;
 
     let mut child = Command::new("sandbox-exec")
         .arg("-f")
@@ -225,9 +272,8 @@ pub fn run_wasi_in_seatbelt(
         )));
     }
 
-    let raw = fs::read_to_string(&result_path).map_err(|err| {
-        SeatbeltError::BadResult(format!("missing result.json: {err}"))
-    })?;
+    let raw = fs::read_to_string(&result_path)
+        .map_err(|err| SeatbeltError::BadResult(format!("missing result.json: {err}")))?;
     let parsed: SeatbeltChildResult = serde_json::from_str(&raw)
         .map_err(|err| SeatbeltError::BadResult(format!("parse result: {err}")))?;
     child_result_to_wasi(parsed)
@@ -305,10 +351,7 @@ fn decode_base64_std(input: &str) -> Result<Vec<u8>, String> {
             _ => Err(format!("invalid base64 byte {c}")),
         }
     }
-    let bytes: Vec<u8> = input
-        .bytes()
-        .filter(|b| !b.is_ascii_whitespace())
-        .collect();
+    let bytes: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
     if bytes.len() % 4 != 0 {
         return Err("base64 length not multiple of 4".into());
     }
@@ -452,7 +495,14 @@ mod tests {
 
     #[test]
     fn base64_round_trip() {
-        let samples: &[&[u8]] = &[b"", b"f", b"fo", b"foo", b"hello from input", &[0xff, 0x00, 0x01]];
+        let samples: &[&[u8]] = &[
+            b"",
+            b"f",
+            b"fo",
+            b"foo",
+            b"hello from input",
+            &[0xff, 0x00, 0x01],
+        ];
         for sample in samples {
             let encoded = encode_base64(sample);
             let decoded = decode_base64_std(&encoded).expect("decode");
@@ -470,7 +520,117 @@ mod tests {
         let profile = temp.path().join("p.sb");
         write_profile(&profile, &run, &runner).expect("profile");
         let text = fs::read_to_string(&profile).expect("read");
+        assert!(
+            text.contains("(deny default)"),
+            "expected deny-default profile, got:\n{text}"
+        );
+        assert!(
+            !text.contains("(allow default)"),
+            "deny-default profile must not include (allow default):\n{text}"
+        );
         assert!(text.contains("(deny network*)"));
-        assert!(text.contains(&run.canonicalize().unwrap().to_string_lossy().to_string()));
+        let run_canon = run.canonicalize().unwrap().to_string_lossy().into_owned();
+        assert!(
+            text.contains(&run_canon),
+            "profile should mention run root {run_canon}"
+        );
+        let runner_canon = runner
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        assert!(
+            text.contains(&runner_canon),
+            "profile should mention runner {runner_canon}"
+        );
+    }
+
+    struct EnvRestore {
+        key: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl EnvRestore {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = env::var_os(key);
+            env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => env::set_var(self.key, value),
+                None => env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn missing_runner_fails_closed() {
+        let _lock = SEATBELT_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _seatbelt = EnvRestore::set(SEATBELT_ENV, "1");
+        let _bin = EnvRestore::set(
+            SEATBELT_BIN_ENV,
+            "/nonexistent/lattice-wasi-seatbelt-missing",
+        );
+
+        let temp = tempfile::tempdir().expect("temp");
+        let run = temp.path().join("run");
+        fs::create_dir_all(&run).expect("run");
+        let err = run_wasi_in_seatbelt(&run, b"\0asm\x01\x00\x00\x00", &WasiRunOptions::default())
+            .expect_err("missing runner must fail closed");
+        if cfg!(target_os = "macos") {
+            assert!(
+                matches!(err, SeatbeltError::RunnerMissing),
+                "expected RunnerMissing, got {err:?}"
+            );
+        } else {
+            assert!(
+                matches!(err, SeatbeltError::UnsupportedPlatform),
+                "forced Seatbelt on non-macOS must be UnsupportedPlatform, got {err:?}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn sandbox_exec_accepts_deny_default_profile() {
+        let temp = tempfile::tempdir().expect("temp");
+        let run = temp.path().join("run");
+        fs::create_dir_all(&run).expect("run");
+        let profile = temp.path().join("p.sb");
+        let runner = Path::new("/usr/bin/true");
+        write_profile(&profile, &run, runner).expect("profile");
+        let text = fs::read_to_string(&profile).expect("read");
+        assert!(text.contains("(deny default)"));
+        assert!(!text.contains("(allow default)"));
+
+        let output = Command::new("sandbox-exec")
+            .arg("-f")
+            .arg(&profile)
+            .arg(runner)
+            .output()
+            .expect("sandbox-exec");
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            assert_ne!(
+                output.status.signal(),
+                Some(6),
+                "deny-default profile SIGABRT stderr={}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        assert!(
+            output.status.success(),
+            "sandbox-exec -f profile /usr/bin/true failed: code={:?} stderr={} stdout={}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
     }
 }

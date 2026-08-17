@@ -13,8 +13,8 @@ use kernelfs::{
     collect_output_commit_plan, materialize_with_options, run_wasi_guest as kernelfs_run,
     ContentKind, ExecutionManifest, HostPathPolicy, HydrationRecord, LatticeProposalAdapter,
     LatticeProposalDraft, MaterializeError, MaterializeOptions, SecretHandleEntry,
-    SecretHandlePolicy, UnsupportedCapabilities, WasmtimeLimits, WasiRunError, WasiRunOptions,
-    WasiRunResult,
+    SecretHandlePolicy, UnsupportedCapabilities, WasiRunError, WasiRunOptions, WasiRunResult,
+    WasmtimeLimits,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -51,10 +51,7 @@ pub struct WorkspaceBinding {
 
 impl WorkspaceBinding {
     pub fn new(workspace_id: Option<String>, root: Option<String>) -> Self {
-        Self {
-            workspace_id,
-            root,
-        }
+        Self { workspace_id, root }
     }
 
     pub fn is_bound(&self) -> bool {
@@ -172,7 +169,11 @@ pub struct WasiProposalProvenance {
 
 impl DraftProvenance for WasiProposalProvenance {
     fn source_resource(&self) -> String {
-        format!("wasi://{}/{}", self.run_id, self.wasm_path.trim_start_matches('/'))
+        format!(
+            "wasi://{}/{}",
+            self.run_id,
+            self.wasm_path.trim_start_matches('/')
+        )
     }
 
     fn enrich_summary(&self, base: &str) -> String {
@@ -221,7 +222,9 @@ pub fn unsupported_capability_error_json(err: &UnsupportedCapabilities) -> Value
 /// Map [`MaterializeError`] into structured tool JSON (`kind` + policy/capability detail).
 pub fn wasi_materialize_error_json(err: &MaterializeError) -> Value {
     match err {
-        MaterializeError::UnsupportedCapabilities(inner) => unsupported_capability_error_json(inner),
+        MaterializeError::UnsupportedCapabilities(inner) => {
+            unsupported_capability_error_json(inner)
+        }
         MaterializeError::SecretHandleNotAllowed { id } => json!({
             "kind": "secret_not_allowed",
             "secretId": id,
@@ -453,28 +456,6 @@ pub fn run_wasi_guest_with_options(
                     stderr: Vec::new(),
                 }));
             }
-            Err(SeatbeltError::RunnerMissing) => {
-                // Incomplete install / unit tests without the helper: keep running
-                // in-process so Linux CI and local debug still work, but warn.
-                tracing::warn!(
-                    target: "lattice_agentd",
-                    "Seatbelt enabled but lattice-wasi-seatbelt missing; falling back to in-process Wasmtime"
-                );
-                kernelfs_run(&run_dir.root, wasm_bytes, &run_opts).map_err(|err| {
-                    emit_stage(KernelfsLifecycleStage::Failed {
-                        kind: "wasi_run".into(),
-                        message: err.to_string(),
-                    });
-                    err
-                })?
-            }
-            Err(SeatbeltError::UnsupportedPlatform) => {
-                emit_stage(KernelfsLifecycleStage::Failed {
-                    kind: "seatbelt".into(),
-                    message: "seatbelt unsupported on this platform".into(),
-                });
-                return Err(WasiHostError::Seatbelt(SeatbeltError::UnsupportedPlatform));
-            }
             Err(err) => {
                 emit_stage(KernelfsLifecycleStage::Failed {
                     kind: "seatbelt".into(),
@@ -588,7 +569,65 @@ pub async fn propose_output_drafts_with_provenance<P: DraftProvenance + Sync>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::seatbelt::{self, SeatbeltError};
     use kernelfs::{Capabilities, SecretHandle};
+
+    struct EnvRestore {
+        key: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl EnvRestore {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn seatbelt_missing_runner_fails_closed() {
+        let _lock = crate::seatbelt::SEATBELT_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _seatbelt = EnvRestore::set(seatbelt::SEATBELT_ENV, "1");
+        let _bin = EnvRestore::set(
+            seatbelt::SEATBELT_BIN_ENV,
+            "/nonexistent/lattice-wasi-seatbelt-missing",
+        );
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let manifest = ExecutionManifest {
+            run_id: "run_missing_runner".into(),
+            base_snapshot: "snap".into(),
+            mounts: Default::default(),
+            capabilities: Default::default(),
+        };
+        let err = run_wasi_guest_with_options(
+            temp.path(),
+            &manifest,
+            b"\0asm\x01\x00\x00\x00",
+            &WasiGuestHostOptions::default(),
+        )
+        .expect_err("missing Seatbelt runner must fail closed");
+        match err {
+            WasiHostError::Seatbelt(SeatbeltError::RunnerMissing) if cfg!(target_os = "macos") => {}
+            WasiHostError::Seatbelt(SeatbeltError::UnsupportedPlatform)
+                if !cfg!(target_os = "macos") => {}
+            other => panic!(
+                "expected Seatbelt RunnerMissing (macOS) or UnsupportedPlatform (other), got {other:?}"
+            ),
+        }
+    }
 
     #[test]
     fn maps_run_id_collision_to_structured_error() {
@@ -634,11 +673,10 @@ mod tests {
 
     #[test]
     fn maps_network_allow_to_structured_capability_error() {
-        let err = MaterializeError::UnsupportedCapabilities(
-            UnsupportedCapabilities::NetworkAllow {
+        let err =
+            MaterializeError::UnsupportedCapabilities(UnsupportedCapabilities::NetworkAllow {
                 hosts: vec!["example.com".into()],
-            },
-        );
+            });
         let value = wasi_materialize_error_json(&err);
         assert_eq!(value["kind"], "unsupported_capability");
         assert_eq!(value["capability"], "network.allow");
@@ -704,7 +742,10 @@ mod tests {
         assert!(summary.contains("runId=run_1"));
         assert!(summary.contains("hello.txt@abc"));
         assert!(summary.contains("target=Reports"));
-        assert_eq!(prov.hydration_inputs()[0].resource_id.as_deref(), Some("rid-1"));
+        assert_eq!(
+            prov.hydration_inputs()[0].resource_id.as_deref(),
+            Some("rid-1")
+        );
     }
 
     #[test]

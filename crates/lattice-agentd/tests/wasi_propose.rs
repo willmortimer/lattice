@@ -3,11 +3,11 @@
 use std::fs;
 use std::sync::Arc;
 
+use base64::Engine;
 use kernelfs::{
     Capabilities, ContentKind, ExecutionManifest, InputMount, LatticeProposalDraft, Mounts,
     NetworkPolicy, SecretHandle, SecretHandleEntry, WasmtimeLimits,
 };
-use base64::Engine;
 use lattice_agentd::lattice_client::LatticeToolClient;
 use lattice_agentd::tools::{dispatch_tool, openai_tool_definitions, ToolRunContext};
 use lattice_agentd::wasi_host::{
@@ -20,9 +20,9 @@ use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 fn copy_hello_wasm() -> &'static [u8] {
     include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../../kernelfs/crates/kernelfs/fixtures/copy_hello.wasm"
-))
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../kernelfs/crates/kernelfs/fixtures/copy_hello.wasm"
+    ))
 }
 
 fn ensure_seatbelt_runner() {
@@ -353,7 +353,10 @@ async fn wasi_propose_resolves_resource_id_from_registry_without_explicit_map() 
     let client = LatticeToolClient::new(latticed.uri(), "test-token").expect("client");
     lattice_agentd::propose_output_drafts_with_provenance(
         &client,
-        &WorkspaceBinding::new(Some("ws-prov".into()), Some(temp.path().to_string_lossy().into())),
+        &WorkspaceBinding::new(
+            Some("ws-prov".into()),
+            Some(temp.path().to_string_lossy().into()),
+        ),
         &result.drafts,
         Some(&provenance),
     )
@@ -479,7 +482,9 @@ async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
         Some("wasi://run_dispatch_test/Tools/guests/copy_hello.wasm")
     );
     assert_eq!(
-        parsed["proposals"][0].get("proposalId").and_then(|v| v.as_str()),
+        parsed["proposals"][0]
+            .get("proposalId")
+            .and_then(|v| v.as_str()),
         Some("prop_test")
     );
     assert_eq!(
@@ -615,9 +620,7 @@ fn run_wasi_guest_tool_schema_documents_presets() {
     let wasi = tools
         .iter()
         .find(|tool| {
-            tool.pointer("/function/name")
-                .and_then(|v| v.as_str())
-                == Some("run_wasi_guest")
+            tool.pointer("/function/name").and_then(|v| v.as_str()) == Some("run_wasi_guest")
         })
         .expect("run_wasi_guest tool");
     let props = wasi
@@ -786,9 +789,7 @@ async fn secret_handles_materialize_when_allowlisted() {
     .expect("allowlisted secret should run");
 
     assert_eq!(result.drafts.len(), 1);
-    let secret_path = temp
-        .path()
-        .join("run_secret_ok/run/secrets/api-key");
+    let secret_path = temp.path().join("run_secret_ok/run/secrets/api-key");
     assert!(
         secret_path.is_file(),
         "expected secret at {}",
@@ -851,6 +852,14 @@ async fn macos_seatbelt_writes_profile_and_runs_guest() {
         profile.display()
     );
     let profile_text = fs::read_to_string(&profile).expect("read profile");
+    assert!(
+        profile_text.contains("(deny default)"),
+        "expected deny-default profile, got:\n{profile_text}"
+    );
+    assert!(
+        !profile_text.contains("(allow default)"),
+        "deny-default profile must not include (allow default):\n{profile_text}"
+    );
     assert!(profile_text.contains("(deny network*)"));
     assert!(profile_text.contains("lattice-wasi-seatbelt"));
 }
