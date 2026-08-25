@@ -146,7 +146,10 @@ describe("desktop file associations", () => {
     }
   });
 
-  it("does not declare NSServices (that is a later slice)", () => {
-    expect(plistText).not.toContain("NSServices");
+  it("declares Finder Add folder to Lattice as an NSService", () => {
+    expect(plistText).toContain("<key>NSServices</key>");
+    expect(plistText).toContain("Add folder to Lattice");
+    expect(plistText).toContain("addFolderToLattice");
+    expect(plistText).toContain("public.folder");
   });
 });
