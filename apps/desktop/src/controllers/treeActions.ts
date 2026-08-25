@@ -1,3 +1,4 @@
+import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
 import { inBrowser } from "../demo";
@@ -10,13 +11,19 @@ import {
   createFolder,
   deleteResources,
   duplicateResource,
+  importFolderIntoWorkspace,
 } from "../lib/resourceMutations";
 import {
   showNativeTreeFolderMenu,
   showNativeTreeResourceMenu,
 } from "../lib/nativeMenus";
 import { fileTimestamp } from "../lib/timestamp";
-import { joinWorkspacePath, resourcePathExists, validateMoveResources } from "../lib/treeOps";
+import {
+  importFolderDestDir,
+  joinWorkspacePath,
+  resourcePathExists,
+  validateMoveResources,
+} from "../lib/treeOps";
 import type { ResourceStat } from "../lib/resourceStat";
 import type { Resource, WorkspaceSnapshot } from "../types";
 
@@ -244,6 +251,46 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     }
   }, [refreshResources, setBusy, setError, setRevealPath, setSnapshot, snapshot, snapshotRef]);
 
+  const handleImportFolderInFolder = useCallback(async (folderPath: string) => {
+    const workspace = snapshotRef.current ?? snapshot;
+    if (!workspace) return;
+    if (inBrowser) {
+      setError("Folder import is not available in the browser demo.");
+      return;
+    }
+
+    const selectedDir = await open({
+      directory: true,
+      multiple: false,
+      title: "Import folder",
+    });
+    if (!selectedDir || typeof selectedDir !== "string") return;
+
+    const destDir = importFolderDestDir(folderPath, selectedDir);
+    setBusy(true);
+    try {
+      const result = await importFolderIntoWorkspace(workspace.root, selectedDir, destDir);
+      await refreshResources();
+      setRevealPath(result.destDir);
+      const skipped = result.skipped.length;
+      const copied = result.copiedCount;
+      const summary = skipped > 0
+        ? `Imported ${copied} file${copied === 1 ? "" : "s"} into ${result.destDir} (${skipped} skipped)`
+        : `Imported ${copied} file${copied === 1 ? "" : "s"} into ${result.destDir}`;
+      setStatusToast(summary);
+      window.setTimeout(() => setStatusToast(null), 3200);
+      setError(null);
+    } catch (error) {
+      setError(String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [refreshResources, setBusy, setError, setRevealPath, setStatusToast, snapshot, snapshotRef]);
+
+  const handleImportFolder = useCallback(async () => {
+    await handleImportFolderInFolder("");
+  }, [handleImportFolderInFolder]);
+
   const handleCloudBackupResource = useCallback(async (resource: Resource) => {
     if (!isCloudBackupResource(resource.kind)) return;
     const workspace = snapshotRef.current ?? snapshot;
@@ -307,9 +354,10 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     void showNativeTreeFolderMenu({
       newPage: () => void handleNewPageInFolder(folderPath),
       newFolder: () => void handleNewFolderInFolder(folderPath),
+      importFolder: inBrowser ? undefined : () => void handleImportFolderInFolder(folderPath),
       copyPath: () => void copyPath(folderPath),
     });
-  }, [copyPath, handleNewFolderInFolder, handleNewPageInFolder]);
+  }, [copyPath, handleImportFolderInFolder, handleNewFolderInFolder, handleNewPageInFolder]);
 
   const handleTreeRename = useCallback(async (resource: Resource, title: string) => {
     await renameResource(resource, title);
@@ -325,6 +373,8 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     handleDuplicateResource,
     handleNewPageInFolder,
     handleNewFolderInFolder,
+    handleImportFolder,
+    handleImportFolderInFolder,
     handleCloudBackupResource,
     copyPath,
   };

@@ -200,6 +200,7 @@ pub fn run() {
             commands::move_resources,
             commands::duplicate_resource,
             commands::create_folder,
+            commands::import_folder_into_workspace,
             link_repair::preview_link_repair,
             link_repair::preview_batch_link_repair,
             link_repair::get_link_repair_proposal,

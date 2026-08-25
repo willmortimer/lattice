@@ -18,6 +18,7 @@ mod error;
 mod github;
 mod gitlab;
 mod home;
+mod import_folder;
 mod oauth;
 mod page;
 mod path;
@@ -66,6 +67,9 @@ pub use gitlab::{
 pub use oauth::oauth_ingest_callback;
 pub use home::{
     create_workspace, ensure_home, list_templates, LatticeHomeInfo, WorkspaceProvisionResult,
+};
+pub use import_folder::{
+    import_folder_into_workspace, FolderImportResult, FolderImportSkippedEntry,
 };
 pub use page::{apply_page_update, create_page, read_page, PageContent};
 pub use quick_note::{prepare_quick_note, prepare_quick_note_with_runtime, prepare_quick_note_with_session, QuickNotePrepared};

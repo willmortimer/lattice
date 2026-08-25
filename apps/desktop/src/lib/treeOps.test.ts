@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Resource } from "../types";
 import {
   destinationPath,
+  importFolderDestDir,
   isAncestorPath,
   joinWorkspacePath,
   newFolderParentPath,
@@ -25,6 +26,12 @@ describe("treeOps path helpers", () => {
     expect(parentDirectory("Notes/A.md")).toBe("Notes");
     expect(parentDirectory("A.md")).toBe("");
     expect(destinationPath("Notes/A.md", "Archive")).toBe("Archive/A.md");
+  });
+
+  it("places an imported folder under the parent using the source name", () => {
+    expect(importFolderDestDir("", "/Users/me/Downloads/Notes")).toBe("Notes");
+    expect(importFolderDestDir("Projects", "/Users/me/Downloads/Notes")).toBe("Projects/Notes");
+    expect(importFolderDestDir("Projects", "C:\\Users\\me\\Notes")).toBe("Projects/Notes");
   });
 
   it("resolves the New folder parent from selection and active folder", () => {

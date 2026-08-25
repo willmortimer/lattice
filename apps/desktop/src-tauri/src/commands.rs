@@ -504,6 +504,17 @@ pub fn create_folder(root: String, path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Copy a folder into the open workspace. Does not create a workspace or
+/// cloud row; conflict-safe (skip different bytes).
+#[tauri::command]
+pub fn import_folder_into_workspace(
+    root: String,
+    source_dir: String,
+    dest_dir: Option<String>,
+) -> Result<lattice_handlers::FolderImportResult, String> {
+    lattice_handlers::import_folder_into_workspace(&root, &source_dir, dest_dir.as_deref())
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryItem {

@@ -25,6 +25,11 @@ If the folder is not a Lattice workspace yet, select it in Finder and choose
 this existing folder**. Opening a stray file that is not already in a workspace
 does not wrap its parent folder as a workspace.
 
+To copy a folder **into the workspace you already have open**, use
+**Import folder…** in the Files tree (plus menu or a folder context menu).
+That is not the same as Add folder to Lattice — it does not create a new
+workspace.
+
 ## Restore on a new Mac
 
 If Lattice has no workspace yet, click **Sign in to Lattice Cloud**, then

@@ -23,6 +23,7 @@ import {
   DotsThree,
   FilePlus,
   Files,
+  FolderOpen,
   FolderPlus,
   Gear,
   House,
@@ -147,6 +148,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleKeepIncoming, handleKeepLocal, handleKeepBoth, handleTreeCollapsedPathsChange,
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
     handleNewFolderInFolder,
+    handleImportFolder,
     treeRenameRequest,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
     applyWorkspaceSettings, handleOpenWiki, openLinkTarget,     handleNotebookContentChange, handleRevisionChange,
@@ -558,6 +560,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
                         Import table
                       </MenuItem>
                     )}
+                    <MenuItem className="ltui-menu-item" onClick={() => void handleImportFolder()}>
+                      <FolderOpen size={14} />
+                      Import folder…
+                    </MenuItem>
                   </MenuPopup>
                 </MenuPositioner>
               </MenuPortal>

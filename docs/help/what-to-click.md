@@ -41,5 +41,9 @@ open **Inspect** on that item or **Show agent** for help with the workspace.
 - **Add a folder from Finder** — select the folder, then **Services → Add folder
   to Lattice**, or use the in-app existing-folder dialog. Opening a stray file
   does not wrap its parent folder as a workspace.
+- **Import a folder into this workspace** — with a workspace already open, use
+  **Import folder…** in the Files tree (plus menu or a folder context menu).
+  That copies the folder in; it does not create a new workspace. Files that
+  already exist with different content are left as-is.
 - **Preview Markdown in Finder** — select the file and press **Space** for
   rendered Markdown, not the source.

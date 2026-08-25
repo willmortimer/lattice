@@ -4,7 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
  * Thin adapters for workspace resource mutations exposed by the desktop shell.
  *
  * Delete, move, duplicate, rename, and folder creation flow through the
- * semantic command core and participate in command history / undo.
+ * semantic command core and participate in command history / undo. Folder
+ * import copies files in place (conflict-safe) and is picked up by the watcher.
  */
 
 export async function deleteResource(root: string, path: string): Promise<void> {
@@ -40,4 +41,29 @@ export async function duplicateResource(root: string, path: string): Promise<str
 
 export async function createFolder(root: string, path: string): Promise<void> {
   await invoke("create_folder", { root, path });
+}
+
+export interface FolderImportSkippedEntry {
+  path: string;
+  reason: string;
+}
+
+export interface FolderImportResult {
+  destDir: string;
+  copiedCount: number;
+  skipped: FolderImportSkippedEntry[];
+}
+
+/** Copy `sourceDir` into the open workspace at `destDir` (conflict-safe). */
+export async function importFolderIntoWorkspace(
+  root: string,
+  sourceDir: string,
+  destDir?: string | null,
+): Promise<FolderImportResult> {
+  const trimmed = destDir?.trim() ?? "";
+  return invoke<FolderImportResult>("import_folder_into_workspace", {
+    root,
+    sourceDir,
+    destDir: trimmed ? trimmed : null,
+  });
 }

@@ -13,6 +13,12 @@ export function basename(path: string): string {
   return slash >= 0 ? path.slice(slash + 1) : path;
 }
 
+/** Workspace-relative dest for importing `sourceDir` under `parentFolder`. */
+export function importFolderDestDir(parentFolder: string, sourceDir: string): string {
+  const normalized = sourceDir.replace(/\\/g, "/").replace(/\/+$/g, "");
+  return joinWorkspacePath(parentFolder, basename(normalized));
+}
+
 export function parentDirectory(path: string): string {
   const slash = path.lastIndexOf("/");
   return slash >= 0 ? path.slice(0, slash) : "";

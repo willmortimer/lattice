@@ -48,6 +48,7 @@ export interface TreeResourceMenuActions {
 export interface TreeFolderMenuActions {
   newPage: () => void;
   newFolder: () => void;
+  importFolder?: () => void;
   copyPath: () => void;
 }
 
@@ -102,6 +103,9 @@ export async function showNativeTreeFolderMenu(actions: TreeFolderMenuActions): 
     items: [
       { text: "New Page", action: actions.newPage },
       { text: "New Folder", action: actions.newFolder },
+      ...(actions.importFolder
+        ? [{ text: "Import folder…", action: actions.importFolder }]
+        : []),
       { item: "Separator" },
       { text: "Copy Path", action: actions.copyPath },
     ],

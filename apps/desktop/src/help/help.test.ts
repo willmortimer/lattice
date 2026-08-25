@@ -55,6 +55,9 @@ describe("help search filter", () => {
     const addFolderMatches = filterHelpPages(CORPUS.pages, "Add folder");
     expect(addFolderMatches.some((page) => page.stem === "what-to-click")).toBe(true);
     expect(addFolderMatches.some((page) => page.stem === "first-workspace")).toBe(true);
+    const importFolderMatches = filterHelpPages(CORPUS.pages, "Import folder");
+    expect(importFolderMatches.some((page) => page.stem === "what-to-click")).toBe(true);
+    expect(importFolderMatches.some((page) => page.stem === "first-workspace")).toBe(true);
     const restoreMatches = filterHelpPages(CORPUS.pages, "Restore encrypted backup");
     expect(restoreMatches.some((page) => page.stem === "what-to-click")).toBe(true);
     expect(restoreMatches.some((page) => page.stem === "first-workspace")).toBe(true);
