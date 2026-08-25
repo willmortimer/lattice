@@ -21,7 +21,7 @@
 | Deep links / Open With files | `deep_link.rs` + `RunEvent::Opened` |
 | Finder document types | `Info.plist` + `fileAssociations` |
 | Spotlight catalog for helpers | `spotlight_index_workspace` → App Group JSON |
-| Quick Look appex sources + scripted build | `apps/desktop/macos/LatticeQuickLook/` + `scripts/macos/build-quicklook-appex.sh` → embedded by `assemble-app` / `desktop-install` |
+| Quick Look appex sources + scripted build | `apps/desktop/macos/LatticeQuickLook/` + `scripts/macos/build-quicklook-appex.sh` → Markdown/HTML preview (WKWebView); embedded by `assemble-app` / `desktop-install` |
 | SE approval CryptoKit bridge | `crates/lattice-approval-macos` (`libLatticeApprovalBridge.dylib`) wired into `ApprovalSigner` |
 
 ## Developer ID launch killers (AMFI SIGKILL)

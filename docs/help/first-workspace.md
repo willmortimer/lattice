@@ -17,7 +17,8 @@ A workspace is just a folder. Lattice shows that folder as your file tree.
 ## Quick check
 
 Write a short page, then open the same folder in Finder. You should see a
-`.md` file. If you do, Lattice is using real files — that is the point.
+`.md` file. If you do, Lattice is using real files — that is the point. Select
+that file and press **Space** to preview it as formatted Markdown.
 
 ## Shortcuts you will use constantly
 

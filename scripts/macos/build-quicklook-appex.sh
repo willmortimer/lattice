@@ -12,7 +12,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 0
 fi
 
-if [[ ! -f "$SRC/PreviewViewController.swift" ]]; then
+if [[ ! -f "$SRC/PreviewViewController.swift" || ! -f "$SRC/MarkdownHTML.swift" ]]; then
   echo "build-quicklook-appex: missing sources in $SRC" >&2
   exit 1
 fi
@@ -39,11 +39,13 @@ mkdir -p "$OUT_DIR/Contents/MacOS"
   -O \
   -framework Cocoa \
   -framework Quartz \
+  -framework WebKit \
   -framework UniformTypeIdentifiers \
   -emit-executable \
   -Xlinker -e -Xlinker _NSExtensionMain \
   -module-name LatticeQuickLook \
   -o "$OUT_DIR/Contents/MacOS/LatticeQuickLook" \
+  "$SRC/MarkdownHTML.swift" \
   "$SRC/PreviewViewController.swift"
 
 # Info.plist with concrete executable name (no Xcode substitutions).
@@ -77,8 +79,7 @@ cat >"$OUT_DIR/Contents/Info.plist" <<'PLIST'
 			<key>QLSupportedContentTypes</key>
 			<array>
 				<string>net.daringfireball.markdown</string>
-				<string>public.plain-text</string>
-				<string>public.json</string>
+				<string>public.markdown</string>
 				<string>dev.lattice.page</string>
 			</array>
 			<key>QLSupportsSearchableItems</key>
