@@ -93,9 +93,13 @@ pub use workspace::{
     WorkspaceSnapshot,
 };
 pub use workspace_backup::{
-    list_encrypted_workspace_backups, list_encrypted_workspace_backups_with_client,
-    put_encrypted_workspace_backup, put_encrypted_workspace_backup_with_client,
-    restore_encrypted_workspace_backup, restore_encrypted_workspace_backup_with_client,
+    list_account_cloud_workspaces, list_account_cloud_workspaces_with_client,
+    list_encrypted_backups_for_cloud_workspace,
+    list_encrypted_backups_for_cloud_workspace_with_client, list_encrypted_workspace_backups,
+    list_encrypted_workspace_backups_with_client, put_encrypted_workspace_backup,
+    put_encrypted_workspace_backup_with_client, restore_encrypted_backup_for_cloud_workspace,
+    restore_encrypted_backup_for_cloud_workspace_with_client, restore_encrypted_workspace_backup,
+    restore_encrypted_workspace_backup_with_client, AccountCloudWorkspaceEntry,
     EncryptedBackupListEntry, EncryptedBackupPutResult, EncryptedBackupRestoreResult,
     EncryptedBackupSkippedEntry,
 };

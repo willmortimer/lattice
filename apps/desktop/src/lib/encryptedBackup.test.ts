@@ -14,8 +14,11 @@ vi.mock("./ipc", () => ({
 
 import {
   formatEncryptedBackupOption,
+  listAccountCloudWorkspaces,
+  listEncryptedBackupsForCloudWorkspace,
   listEncryptedWorkspaceBackups,
   putEncryptedWorkspaceBackup,
+  restoreEncryptedBackupForCloudWorkspace,
   restoreEncryptedWorkspaceBackup,
 } from "./encryptedBackup";
 
@@ -113,5 +116,88 @@ describe("encryptedBackup", () => {
     expect(label).toContain("2.0 KB");
     expect(label).toContain("abcdef012345");
     expect(label).not.toContain("backups/");
+  });
+
+  it("listAccountCloudWorkspaces invokes without unlocking the DEK", async () => {
+    getCloudSessionStatus.mockResolvedValue({ signedIn: true });
+    invoke.mockResolvedValueOnce([
+      {
+        id: "cloud-ws-1",
+        name: "Personal",
+        localWorkspaceId: "local-a",
+        createdAt: 11,
+      },
+    ]);
+
+    const list = await listAccountCloudWorkspaces();
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("list_account_cloud_workspaces_cmd");
+    expect(list[0]?.id).toBe("cloud-ws-1");
+    expect(list[0]?.localWorkspaceId).toBe("local-a");
+  });
+
+  it("listAccountCloudWorkspaces rejects when not signed in", async () => {
+    getCloudSessionStatus.mockResolvedValue({ signedIn: false });
+    await expect(listAccountCloudWorkspaces()).rejects.toThrow(/Sign in under Settings/);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("listEncryptedBackupsForCloudWorkspace invokes without unlocking the DEK", async () => {
+    getCloudSessionStatus.mockResolvedValue({ signedIn: true });
+    invoke.mockResolvedValueOnce([
+      {
+        id: "bk-1",
+        workspaceId: "cloud-ws-1",
+        deviceId: null,
+        size: 42,
+        contentHash: "abc123",
+        createdAt: 99,
+      },
+    ]);
+
+    const list = await listEncryptedBackupsForCloudWorkspace("cloud-ws-1");
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("list_encrypted_backups_for_cloud_workspace_cmd", {
+      cloudWorkspaceId: "cloud-ws-1",
+    });
+    expect(list[0]?.id).toBe("bk-1");
+  });
+
+  it("restoreEncryptedBackupForCloudWorkspace does not unlock the DEK", async () => {
+    getCloudSessionStatus.mockResolvedValue({ signedIn: true });
+    invoke.mockResolvedValueOnce({
+      backupId: "bk-1",
+      restoredCount: 3,
+      skipped: [],
+    });
+
+    const result = await restoreEncryptedBackupForCloudWorkspace(
+      "cloud-ws-1",
+      "/empty",
+      "bk-1",
+    );
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("restore_encrypted_backup_for_cloud_workspace_cmd", {
+      cloudWorkspaceId: "cloud-ws-1",
+      targetRoot: "/empty",
+      backupId: "bk-1",
+    });
+    expect(invoke).not.toHaveBeenCalledWith(
+      "workspace_crypto_unlock_cmd",
+      expect.anything(),
+    );
+    expect(result.backupId).toBe("bk-1");
+    expect(result.restoredCount).toBe(3);
+  });
+
+  it("restoreEncryptedBackupForCloudWorkspace rejects when not signed in", async () => {
+    getCloudSessionStatus.mockResolvedValue({ signedIn: false });
+    await expect(
+      restoreEncryptedBackupForCloudWorkspace("cloud-ws-1", "/empty", "bk-1"),
+    ).rejects.toThrow(/Sign in under Settings/);
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

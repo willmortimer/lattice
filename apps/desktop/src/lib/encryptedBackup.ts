@@ -34,6 +34,13 @@ export interface EncryptedBackupListEntry {
   createdAt: number;
 }
 
+export interface AccountCloudWorkspace {
+  id: string;
+  name: string;
+  localWorkspaceId?: string | null;
+  createdAt: number;
+}
+
 const SIGN_IN_PREFIX = "Sign in under Settings → Cloud account";
 
 function backupCreatedAtMs(createdAt: number): number {
@@ -129,4 +136,76 @@ export async function restoreEncryptedWorkspaceBackup(
     targetRoot,
     backupId,
   });
+}
+
+/**
+ * List cloud workspace rows for the signed-in account. HTTP-only — does not
+ * create a cloud workspace or unlock a DEK.
+ */
+export async function listAccountCloudWorkspaces(): Promise<AccountCloudWorkspace[]> {
+  const session = await getCloudSessionStatus();
+  if (!session.signedIn) {
+    throw new Error(
+      `${SIGN_IN_PREFIX} before listing cloud workspaces.`,
+    );
+  }
+  return invoke<AccountCloudWorkspace[]>("list_account_cloud_workspaces_cmd");
+}
+
+/**
+ * List encrypted backups for a chosen cloud workspace id. Does not open a local
+ * workspace or unlock a DEK.
+ */
+export async function listEncryptedBackupsForCloudWorkspace(
+  cloudWorkspaceId: string,
+): Promise<EncryptedBackupListEntry[]> {
+  const session = await getCloudSessionStatus();
+  if (!session.signedIn) {
+    throw new Error(
+      `${SIGN_IN_PREFIX} before listing encrypted backups.`,
+    );
+  }
+  if (!cloudWorkspaceId.trim()) {
+    throw new Error("Choose a cloud workspace before listing encrypted backups.");
+  }
+  return invoke<EncryptedBackupListEntry[]>(
+    "list_encrypted_backups_for_cloud_workspace_cmd",
+    { cloudWorkspaceId },
+  );
+}
+
+/**
+ * Restore an LWBE backup into `targetRoot` using a cloud workspace id.
+ *
+ * Does **not** call `unlockWorkspaceCrypto` (that would provision a random DEK
+ * on a new device). Envelope unwrap imports the backed-up key in Rust.
+ */
+export async function restoreEncryptedBackupForCloudWorkspace(
+  cloudWorkspaceId: string,
+  targetRoot: string,
+  backupId: string,
+): Promise<EncryptedBackupRestoreResult> {
+  const session = await getCloudSessionStatus();
+  if (!session.signedIn) {
+    throw new Error(
+      `${SIGN_IN_PREFIX} before restoring an encrypted backup.`,
+    );
+  }
+  if (!cloudWorkspaceId.trim()) {
+    throw new Error("Choose a cloud workspace before restoring an encrypted backup.");
+  }
+  if (!targetRoot.trim()) {
+    throw new Error("Choose a restore folder before restoring an encrypted backup.");
+  }
+  if (!backupId.trim()) {
+    throw new Error("Choose a backup before restoring.");
+  }
+  return invoke<EncryptedBackupRestoreResult>(
+    "restore_encrypted_backup_for_cloud_workspace_cmd",
+    {
+      cloudWorkspaceId,
+      targetRoot,
+      backupId,
+    },
+  );
 }

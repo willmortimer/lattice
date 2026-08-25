@@ -4,13 +4,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use lattice_cloud_client::{
-    default_client, BackupMetadataResponse, CloudApiClient, CloudHttpClient, HttpCloudClient,
+    BackupMetadataResponse, CloudApiClient, CloudHttpClient, HttpCloudClient, default_client,
 };
 use lattice_core::{Workspace, WorkspaceManifest};
 use lattice_storage::atomic_write_file;
 use lattice_workspace_crypto::{
-    build_workspace_backup_payload, decrypt_blob, is_backup_envelope, open_backup_envelope,
-    parse_workspace_backup_payload, seal_backup_envelope, BackupPayload, Dek,
+    BackupPayload, Dek, build_workspace_backup_payload, decrypt_blob, is_backup_envelope,
+    open_backup_envelope, parse_workspace_backup_payload, seal_backup_envelope,
 };
 use serde::Serialize;
 
@@ -55,6 +55,27 @@ pub struct EncryptedBackupListEntry {
     pub created_at: i64,
 }
 
+/// Account-scoped cloud workspace row for cold restore. No secrets.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountCloudWorkspaceEntry {
+    pub id: String,
+    pub name: String,
+    pub local_workspace_id: Option<String>,
+    pub created_at: i64,
+}
+
+impl From<lattice_cloud_client::CloudWorkspaceRecord> for AccountCloudWorkspaceEntry {
+    fn from(ws: lattice_cloud_client::CloudWorkspaceRecord) -> Self {
+        Self {
+            id: ws.id,
+            name: ws.name,
+            local_workspace_id: ws.local_workspace_id,
+            created_at: ws.created_at,
+        }
+    }
+}
+
 impl From<BackupMetadataResponse> for EncryptedBackupListEntry {
     fn from(meta: BackupMetadataResponse) -> Self {
         Self {
@@ -70,6 +91,14 @@ impl From<BackupMetadataResponse> for EncryptedBackupListEntry {
 
 fn map_err(err: impl std::fmt::Display) -> String {
     err.to_string()
+}
+
+fn require_non_empty<'a>(value: &'a str, label: &str) -> Result<&'a str, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(format!("{label} is required"));
+    }
+    Ok(trimmed)
 }
 
 fn api_client() -> CloudApiClient<HttpCloudClient> {
@@ -208,6 +237,95 @@ pub fn restore_encrypted_workspace_backup_with_client<C: CloudHttpClient>(
     })
 }
 
+/// List cloud workspace rows for the signed-in account. HTTP-only; never creates a row.
+pub fn list_account_cloud_workspaces() -> Result<Vec<AccountCloudWorkspaceEntry>, String> {
+    let bearer = resolve_cloud_bearer_cmd()?;
+    list_account_cloud_workspaces_with_client(&api_client(), &bearer)
+}
+
+pub fn list_account_cloud_workspaces_with_client<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    bearer: &str,
+) -> Result<Vec<AccountCloudWorkspaceEntry>, String> {
+    let workspaces = client.list_workspaces(bearer).map_err(map_err)?;
+    Ok(workspaces
+        .into_iter()
+        .map(AccountCloudWorkspaceEntry::from)
+        .collect())
+}
+
+/// List encrypted backups for a **cloud** workspace id. Does not open a local
+/// workspace or create a cloud row.
+pub fn list_encrypted_backups_for_cloud_workspace(
+    cloud_workspace_id: &str,
+) -> Result<Vec<EncryptedBackupListEntry>, String> {
+    let bearer = resolve_cloud_bearer_cmd()?;
+    list_encrypted_backups_for_cloud_workspace_with_client(
+        &api_client(),
+        &bearer,
+        cloud_workspace_id,
+    )
+}
+
+pub fn list_encrypted_backups_for_cloud_workspace_with_client<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    bearer: &str,
+    cloud_workspace_id: &str,
+) -> Result<Vec<EncryptedBackupListEntry>, String> {
+    let cloud_workspace_id = require_non_empty(cloud_workspace_id, "cloud workspace id")?;
+    let list = client
+        .list_workspace_backups(bearer, cloud_workspace_id)
+        .map_err(map_err)?;
+    Ok(list
+        .into_iter()
+        .map(EncryptedBackupListEntry::from)
+        .collect())
+}
+
+/// Restore an LWBE backup for a **cloud** workspace id into `target_root`.
+///
+/// Never opens a local workspace, never creates a cloud row, and never calls
+/// `workspace_crypto_unlock` (which would provision a random DEK on miss).
+/// Legacy (non-envelope) bodies fail closed: there is no local DEK on a new device.
+pub fn restore_encrypted_backup_for_cloud_workspace(
+    cloud_workspace_id: &str,
+    target_root: &str,
+    backup_id: &str,
+) -> Result<EncryptedBackupRestoreResult, String> {
+    let bearer = resolve_cloud_bearer_cmd()?;
+    restore_encrypted_backup_for_cloud_workspace_with_client(
+        &api_client(),
+        &bearer,
+        cloud_workspace_id,
+        target_root,
+        backup_id,
+    )
+}
+
+pub fn restore_encrypted_backup_for_cloud_workspace_with_client<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    bearer: &str,
+    cloud_workspace_id: &str,
+    target_root: &str,
+    backup_id: &str,
+) -> Result<EncryptedBackupRestoreResult, String> {
+    let cloud_workspace_id = require_non_empty(cloud_workspace_id, "cloud workspace id")?;
+    let target_root = require_non_empty(target_root, "restore target")?;
+    let backup_id = require_non_empty(backup_id, "backup id")?;
+
+    let ciphertext = client
+        .get_workspace_backup(bearer, cloud_workspace_id, backup_id)
+        .map_err(map_err)?;
+    let payload = decrypt_envelope_restore_payload(client, bearer, &ciphertext)?;
+
+    let restore = restore_payload_into_target(Path::new(target_root), &payload)?;
+    Ok(EncryptedBackupRestoreResult {
+        backup_id: backup_id.to_string(),
+        restored_count: restore.0,
+        skipped: restore.1,
+    })
+}
+
 fn restore_payload_into_target(
     target_root: &Path,
     payload: &BackupPayload,
@@ -309,21 +427,38 @@ fn decrypt_restore_payload<C: CloudHttpClient>(
     body: &[u8],
 ) -> Result<BackupPayload, String> {
     if is_backup_envelope(body) {
-        let wrap_key = fetch_account_wrap_key(client, bearer)?;
-        let (dek, inner) = open_backup_envelope(&wrap_key, body).map_err(|err| {
-            format!("failed to unwrap backup DEK (will not provision a new key): {err}")
-        })?;
-        let plaintext = decrypt_blob(&dek, &inner).map_err(map_err)?;
-        let payload = parse_workspace_backup_payload(&plaintext).map_err(map_err)?;
-        let payload_workspace_id = workspace_id_from_manifest(&payload.manifest)?;
-        workspace_crypto_import_dek(&payload_workspace_id, dek)?;
-        Ok(payload)
+        decrypt_envelope_restore_payload(client, bearer, body)
     } else {
         let plaintext = with_unlocked_session(local_id, |session| {
             session.decrypt_blob(body).map_err(map_err)
         })?;
         parse_workspace_backup_payload(&plaintext).map_err(map_err)
     }
+}
+
+/// Unwrap an `LWBE` envelope and import the restored DEK. Fail-closed: never
+/// provisions a key, and never decrypts legacy (non-envelope) ciphertext.
+fn decrypt_envelope_restore_payload<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    bearer: &str,
+    body: &[u8],
+) -> Result<BackupPayload, String> {
+    if !is_backup_envelope(body) {
+        return Err(
+            "account-scoped restore requires a wrapped backup envelope (LWBE); \
+             legacy backups need the original workspace DEK"
+                .into(),
+        );
+    }
+    let wrap_key = fetch_account_wrap_key(client, bearer)?;
+    let (dek, inner) = open_backup_envelope(&wrap_key, body).map_err(|err| {
+        format!("failed to unwrap backup DEK (will not provision a new key): {err}")
+    })?;
+    let plaintext = decrypt_blob(&dek, &inner).map_err(map_err)?;
+    let payload = parse_workspace_backup_payload(&plaintext).map_err(map_err)?;
+    let payload_workspace_id = workspace_id_from_manifest(&payload.manifest)?;
+    workspace_crypto_import_dek(&payload_workspace_id, dek)?;
+    Ok(payload)
 }
 
 fn workspace_id_from_manifest(bytes: &[u8]) -> Result<String, String> {
@@ -343,9 +478,9 @@ mod tests {
     };
     use lattice_core::Workspace;
     use lattice_workspace_crypto::{
+        Dek, ENVELOPE_MAGIC, MemoryKeystore, WorkspaceCryptoSession,
         build_workspace_backup_payload, decrypt_blob, is_backup_envelope, open_backup_envelope,
-        parse_workspace_backup_payload, Dek, MemoryKeystore, WorkspaceCryptoSession,
-        ENVELOPE_MAGIC,
+        parse_workspace_backup_payload, seal_backup_envelope,
     };
     use latticefs_core::ContentHash;
 
@@ -363,6 +498,7 @@ mod tests {
         responses: Arc<Mutex<HashMap<String, CloudHttpResponse>>>,
         bytes_responses: Arc<Mutex<HashMap<String, CloudHttpBytesResponse>>>,
         captured_put: Arc<Mutex<Option<Vec<u8>>>>,
+        calls: Arc<Mutex<Vec<String>>>,
     }
 
     impl FakeHttp {
@@ -379,6 +515,10 @@ mod tests {
                 .unwrap()
                 .insert(format!("{method} {path}"), response);
         }
+
+        fn record(&self, method: &str, path: &str) {
+            self.calls.lock().unwrap().push(format!("{method} {path}"));
+        }
     }
 
     impl CloudHttpClient for FakeHttp {
@@ -390,6 +530,7 @@ mod tests {
             _body: Option<&serde_json::Value>,
             bearer: Option<&str>,
         ) -> Result<CloudHttpResponse, CloudError> {
+            self.record(method, path);
             let key = format!("{method} {path}");
             if bearer != Some("tok") {
                 return Ok(CloudHttpResponse {
@@ -414,6 +555,7 @@ mod tests {
             bearer: Option<&str>,
             _headers: &[(&str, &str)],
         ) -> Result<CloudHttpBytesResponse, CloudError> {
+            self.record(method, path);
             if bearer != Some("tok") {
                 return Ok(CloudHttpBytesResponse {
                     status: 401,
@@ -480,6 +622,27 @@ mod tests {
 
     fn test_wrap_key() -> Dek {
         Dek::try_from_slice(&hex::decode(TEST_WRAP_KEY_HEX).unwrap()).unwrap()
+    }
+
+    fn assert_no_workspace_create(http: &FakeHttp) {
+        let calls = http.calls.lock().unwrap();
+        assert!(
+            !calls.iter().any(|call| call == "POST /v1/workspaces"),
+            "create_workspace must not be called: {calls:?}"
+        );
+    }
+
+    /// Seal an LWBE envelope with an independent keystore so the process session
+    /// stays locked (empty-device cold restore).
+    fn seal_test_envelope(root: &std::path::Path, wrap_key: &Dek) -> Vec<u8> {
+        let local_id = Workspace::open(root).unwrap().manifest().id.to_string();
+        let store = MemoryKeystore::new();
+        let mut session = WorkspaceCryptoSession::new(store);
+        session.provision(&local_id).unwrap();
+        let plaintext = build_workspace_backup_payload(root).unwrap();
+        let ciphertext = session.encrypt_blob(&plaintext).unwrap();
+        let wrapped = session.wrap_unlocked_dek(wrap_key).unwrap();
+        seal_backup_envelope(&wrapped, &ciphertext).unwrap()
     }
 
     #[test]
@@ -629,10 +792,12 @@ mod tests {
 
         assert_eq!(result.backup_id, "bk-latest");
         assert!(result.restored_count >= 2);
-        assert!(result
-            .skipped
-            .iter()
-            .any(|s| s.path == "Notes.md" && s.reason.contains("different content")));
+        assert!(
+            result
+                .skipped
+                .iter()
+                .any(|s| s.path == "Notes.md" && s.reason.contains("different content"))
+        );
         assert_eq!(
             std::fs::read(target.path().join("Notes.md")).unwrap(),
             b"local different"
@@ -922,5 +1087,242 @@ mod tests {
         )
         .unwrap();
         assert!(list.is_empty());
+    }
+
+    #[test]
+    fn list_account_cloud_workspaces_returns_public_fields() {
+        let http = FakeHttp::default();
+        http.insert(
+            "GET",
+            "/v1/workspaces",
+            CloudHttpResponse {
+                status: 200,
+                body: r#"[{"id":"cloud-ws-1","owner_user_id":"u1","name":"Personal","local_workspace_id":"local-a","created_at":11},{"id":"cloud-ws-2","owner_user_id":"u1","name":"Team","local_workspace_id":null,"created_at":22}]"#.into(),
+            },
+        );
+
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let list = list_account_cloud_workspaces_with_client(&client, "tok").unwrap();
+        assert_eq!(
+            list,
+            vec![
+                AccountCloudWorkspaceEntry {
+                    id: "cloud-ws-1".into(),
+                    name: "Personal".into(),
+                    local_workspace_id: Some("local-a".into()),
+                    created_at: 11,
+                },
+                AccountCloudWorkspaceEntry {
+                    id: "cloud-ws-2".into(),
+                    name: "Team".into(),
+                    local_workspace_id: None,
+                    created_at: 22,
+                },
+            ]
+        );
+        let json = serde_json::to_value(&list[0]).unwrap();
+        assert_eq!(json["id"], "cloud-ws-1");
+        assert_eq!(json["name"], "Personal");
+        assert_eq!(json["localWorkspaceId"], "local-a");
+        assert_eq!(json["createdAt"], 11);
+        assert!(json.get("ownerUserId").is_none());
+        assert!(json.get("owner_user_id").is_none());
+        assert_no_workspace_create(&http);
+    }
+
+    #[test]
+    fn list_encrypted_backups_for_cloud_workspace_does_not_create() {
+        let http = FakeHttp::default();
+        http.insert(
+            "GET",
+            "/v1/workspaces/cloud-ws-1/backups",
+            CloudHttpResponse {
+                status: 200,
+                body: r#"[{"id":"bk-latest","workspace_id":"cloud-ws-1","device_id":null,"object_key":"backups/cloud-ws-1/bk-latest","size":42,"content_hash":"abc123","created_at":99}]"#.into(),
+            },
+        );
+
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let list =
+            list_encrypted_backups_for_cloud_workspace_with_client(&client, "tok", "cloud-ws-1")
+                .unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, "bk-latest");
+        assert_eq!(list[0].workspace_id, "cloud-ws-1");
+        let json = serde_json::to_value(&list[0]).unwrap();
+        assert!(json.get("objectKey").is_none());
+        assert_no_workspace_create(&http);
+        let calls = http.calls.lock().unwrap();
+        assert!(
+            !calls.iter().any(|call| call == "GET /v1/workspaces"),
+            "must not list/create account workspaces to resolve a cloud id: {calls:?}"
+        );
+    }
+
+    #[test]
+    fn restore_envelope_for_cloud_workspace_into_empty_dir() {
+        let src = tempfile::tempdir().unwrap();
+        Workspace::init(src.path(), "EncBackup").unwrap();
+        std::fs::write(src.path().join("Notes.md"), b"secret notes").unwrap();
+        let local_id = Workspace::open(src.path())
+            .unwrap()
+            .manifest()
+            .id
+            .to_string();
+
+        let _ = workspace_crypto_lock();
+        let envelope = seal_test_envelope(src.path(), &test_wrap_key());
+        assert!(is_backup_envelope(&envelope));
+        assert!(!crate::workspace_crypto::workspace_crypto_status().unlocked);
+
+        let hash_hex = ContentHash::from_bytes(&envelope)
+            .unwrap()
+            .as_str()
+            .strip_prefix("sha256:")
+            .unwrap()
+            .to_string();
+        let http = FakeHttp::default();
+        seed_wrap_key(&http);
+        http.insert_bytes(
+            "GET",
+            "/v1/workspaces/cloud-ws-1/backups/bk-1",
+            CloudHttpBytesResponse {
+                status: 200,
+                body: envelope,
+                content_hash: Some(hash_hex),
+            },
+        );
+
+        let target = tempfile::tempdir().unwrap();
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let result = restore_encrypted_backup_for_cloud_workspace_with_client(
+            &client,
+            "tok",
+            "cloud-ws-1",
+            &target.path().to_string_lossy(),
+            "bk-1",
+        )
+        .unwrap();
+
+        assert_eq!(result.backup_id, "bk-1");
+        assert!(target.path().join("lattice.yaml").is_file());
+        assert_eq!(
+            std::fs::read(target.path().join("Notes.md")).unwrap(),
+            b"secret notes"
+        );
+        let restored_id = Workspace::open(target.path())
+            .unwrap()
+            .manifest()
+            .id
+            .to_string();
+        assert_eq!(restored_id, local_id);
+        assert!(crate::workspace_crypto::workspace_crypto_status().unlocked);
+        assert_eq!(
+            crate::workspace_crypto::workspace_crypto_status()
+                .workspace_id
+                .as_deref(),
+            Some(local_id.as_str())
+        );
+        assert_no_workspace_create(&http);
+        let calls = http.calls.lock().unwrap();
+        assert!(
+            !calls.iter().any(|call| call == "GET /v1/workspaces"),
+            "must not resolve via ensure_cloud_workspace: {calls:?}"
+        );
+    }
+
+    #[test]
+    fn restore_for_cloud_workspace_wrong_wrap_key_does_not_provision() {
+        let src = tempfile::tempdir().unwrap();
+        Workspace::init(src.path(), "EncBackup").unwrap();
+        std::fs::write(src.path().join("Notes.md"), b"secret notes").unwrap();
+
+        let _ = workspace_crypto_lock();
+        let envelope = seal_test_envelope(src.path(), &test_wrap_key());
+
+        let http = FakeHttp::default();
+        http.insert(
+            "GET",
+            "/v1/me/backup-wrap-key",
+            CloudHttpResponse {
+                status: 200,
+                body: r#"{"wrap_key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#.into(),
+            },
+        );
+        http.insert_bytes(
+            "GET",
+            "/v1/workspaces/cloud-ws-1/backups/bk-1",
+            CloudHttpBytesResponse {
+                status: 200,
+                body: envelope,
+                content_hash: None,
+            },
+        );
+
+        let target = tempfile::tempdir().unwrap();
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let err = restore_encrypted_backup_for_cloud_workspace_with_client(
+            &client,
+            "tok",
+            "cloud-ws-1",
+            &target.path().to_string_lossy(),
+            "bk-1",
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("failed to unwrap backup DEK"),
+            "unexpected error: {err}"
+        );
+        assert!(!crate::workspace_crypto::workspace_crypto_status().unlocked);
+        assert!(!target.path().join("lattice.yaml").exists());
+        assert!(!target.path().join("Notes.md").exists());
+        assert_no_workspace_create(&http);
+    }
+
+    #[test]
+    fn restore_for_cloud_workspace_rejects_legacy_ciphertext() {
+        let src = tempfile::tempdir().unwrap();
+        Workspace::init(src.path(), "EncBackup").unwrap();
+        std::fs::write(src.path().join("Notes.md"), b"secret notes").unwrap();
+        let local_id = Workspace::open(src.path())
+            .unwrap()
+            .manifest()
+            .id
+            .to_string();
+
+        let store = MemoryKeystore::new();
+        let mut session = WorkspaceCryptoSession::new(store);
+        session.provision(&local_id).unwrap();
+        let plaintext = build_workspace_backup_payload(src.path()).unwrap();
+        let legacy = session.encrypt_blob(&plaintext).unwrap();
+        assert!(!is_backup_envelope(&legacy));
+
+        let _ = workspace_crypto_lock();
+        let http = FakeHttp::default();
+        seed_wrap_key(&http);
+        http.insert_bytes(
+            "GET",
+            "/v1/workspaces/cloud-ws-1/backups/bk-legacy",
+            CloudHttpBytesResponse {
+                status: 200,
+                body: legacy,
+                content_hash: None,
+            },
+        );
+
+        let target = tempfile::tempdir().unwrap();
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let err = restore_encrypted_backup_for_cloud_workspace_with_client(
+            &client,
+            "tok",
+            "cloud-ws-1",
+            &target.path().to_string_lossy(),
+            "bk-legacy",
+        )
+        .unwrap_err();
+        assert!(err.contains("legacy"), "unexpected error: {err}");
+        assert!(!crate::workspace_crypto::workspace_crypto_status().unlocked);
+        assert!(!target.path().join("lattice.yaml").exists());
+        assert_no_workspace_create(&http);
     }
 }

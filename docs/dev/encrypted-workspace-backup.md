@@ -42,5 +42,39 @@ local manifest id (`local_workspace_id`).
    `{ root, targetRoot, backupId? }`. TypeScript helper:
    `restoreEncryptedWorkspaceBackup(root, targetRoot, workspaceId, backupId?)`.
 
+## Client path — account-scoped restore (empty device)
+
+Open-workspace list/restore calls `Workspace::open` and
+`ensure_cloud_workspace`, which **creates** a cloud row when the local
+manifest id is missing. An empty machine has no matching local id, so cold
+restore cannot open Personal first.
+
+Account-scoped commands take a **cloud workspace id**, never a local root, and
+never call `ensure_cloud_workspace` / `POST /v1/workspaces`:
+
+1. `list_account_cloud_workspaces` → `GET /v1/workspaces` and returns
+   `id` / `name` / `localWorkspaceId` / `createdAt` (no secrets).
+2. `list_encrypted_backups_for_cloud_workspace` → existing
+   `list_workspace_backups` for that cloud id.
+3. `restore_encrypted_backup_for_cloud_workspace` → GET ciphertext → unwrap
+   `LWBE` with the account wrap key → `import_dek` for the payload workspace
+   id → write `lattice.yaml` and files into `target_root`. Caller then
+   `open_workspace`s the folder.
+
+Fail-closed:
+
+- Envelope present but unwrap fails → error; **do not** provision a DEK
+  (`workspace_crypto_unlock` is not called).
+- Legacy (non-`LWBE`) body → error on this path (no local DEK on a new
+  device). Open-workspace restore still decrypts legacy ciphertext with the
+  unlocked local DEK.
+
+Tauri: `list_account_cloud_workspaces_cmd`,
+`list_encrypted_backups_for_cloud_workspace_cmd`,
+`restore_encrypted_backup_for_cloud_workspace_cmd`. TypeScript:
+`listAccountCloudWorkspaces()`,
+`listEncryptedBackupsForCloudWorkspace(cloudWorkspaceId)`,
+`restoreEncryptedBackupForCloudWorkspace(cloudWorkspaceId, targetRoot, backupId)`.
+
 See also: ecosystem `lattice-cloud` `cloud_api.rs` backup handlers and
 `docs/architecture/cloud-backend-dag.md` (CB2 opaque backup).

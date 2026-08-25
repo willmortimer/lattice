@@ -1,9 +1,11 @@
 //! Workspace encryption + encrypted cloud backup Tauri commands.
 
 use lattice_handlers::{
+    list_account_cloud_workspaces, list_encrypted_backups_for_cloud_workspace,
     list_encrypted_workspace_backups, put_encrypted_workspace_backup,
-    restore_encrypted_workspace_backup, workspace_crypto_lock, workspace_crypto_status,
-    workspace_crypto_unlock, EncryptedBackupListEntry, EncryptedBackupPutResult,
+    restore_encrypted_backup_for_cloud_workspace, restore_encrypted_workspace_backup,
+    workspace_crypto_lock, workspace_crypto_status, workspace_crypto_unlock,
+    AccountCloudWorkspaceEntry, EncryptedBackupListEntry, EncryptedBackupPutResult,
     EncryptedBackupRestoreResult, WorkspaceCryptoStatus,
 };
 
@@ -48,4 +50,30 @@ pub fn restore_encrypted_workspace_backup_cmd(
     backup_id: Option<String>,
 ) -> Result<EncryptedBackupRestoreResult, String> {
     restore_encrypted_workspace_backup(&root, &target_root, backup_id.as_deref())
+}
+
+/// List cloud workspace rows for the signed-in account (no secrets; no create).
+#[tauri::command]
+pub fn list_account_cloud_workspaces_cmd() -> Result<Vec<AccountCloudWorkspaceEntry>, String> {
+    list_account_cloud_workspaces()
+}
+
+/// List encrypted backups for a cloud workspace id without opening a local root.
+#[tauri::command]
+pub fn list_encrypted_backups_for_cloud_workspace_cmd(
+    cloud_workspace_id: String,
+) -> Result<Vec<EncryptedBackupListEntry>, String> {
+    list_encrypted_backups_for_cloud_workspace(&cloud_workspace_id)
+}
+
+/// Restore an LWBE backup into `target_root` using a cloud workspace id.
+///
+/// Does not unlock/provision a local DEK; envelope unwrap imports the backed-up key.
+#[tauri::command]
+pub fn restore_encrypted_backup_for_cloud_workspace_cmd(
+    cloud_workspace_id: String,
+    target_root: String,
+    backup_id: String,
+) -> Result<EncryptedBackupRestoreResult, String> {
+    restore_encrypted_backup_for_cloud_workspace(&cloud_workspace_id, &target_root, &backup_id)
 }
