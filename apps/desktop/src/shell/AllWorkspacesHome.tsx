@@ -2,10 +2,11 @@ import { Button } from "@lattice/ui";
 import { FolderOpen, FolderPlus, DownloadSimple } from "@phosphor-icons/react";
 import { useMemo } from "react";
 
-import { useWorkspaceCatalogQuery } from "../query";
+import { useWorkspaceCatalogQuery, useWorkspaceSummaryQueries } from "../query";
 import type { RecentWorkspace } from "../lib/profile";
 import {
   groupWorkspaceCatalog,
+  visibleWorkspaceCatalogIds,
   workspaceCatalogStatusLabel,
   type WorkspaceCatalogRow,
 } from "../lib/workspaceCatalogGroups";
@@ -97,7 +98,7 @@ export function AllWorkspacesHome({
   onImport: () => void;
 }) {
   const catalogQuery = useWorkspaceCatalogQuery();
-  const grouped = useMemo(
+  const groupedMeta = useMemo(
     () =>
       groupWorkspaceCatalog({
         catalog: catalogQuery.data,
@@ -106,9 +107,24 @@ export function AllWorkspacesHome({
       }),
     [catalogQuery.data, pinnedRoot, recents],
   );
+  const summaryIds = useMemo(() => visibleWorkspaceCatalogIds(groupedMeta), [groupedMeta]);
+  const summaries = useWorkspaceSummaryQueries(summaryIds);
+  const grouped = useMemo(
+    () =>
+      groupWorkspaceCatalog({
+        catalog: catalogQuery.data,
+        recents,
+        pinnedRoot,
+        summaries,
+      }),
+    [catalogQuery.data, pinnedRoot, recents, summaries],
+  );
 
   const loading = catalogQuery.isLoading && !catalogQuery.data;
   const empty = !loading && grouped.all.length === 0;
+  const activeSummary = activeWorkspaceId ? summaries.get(activeWorkspaceId) : undefined;
+  const currentTitle =
+    (activeSummary?.manifestPresent ? activeSummary.title.trim() : "") || activeWorkspaceTitle;
 
   return (
     <div className="home-dashboard all-workspaces-home">
@@ -118,7 +134,7 @@ export function AllWorkspacesHome({
         <p>
           Open a registered workspace by id. Lattice lists registry metadata only — it does not
           scan every workspace on Home.
-          {activeWorkspaceTitle ? ` Current: ${activeWorkspaceTitle}.` : ""}
+          {currentTitle ? ` Current: ${currentTitle}.` : ""}
         </p>
         <div>
           <Button variant="primary" onClick={onCreate} disabled={busy}>

@@ -265,4 +265,42 @@ mod tests {
     fn title_from_root_uses_last_segment() {
         assert_eq!(title_from_root("/Users/demo/Notes"), "Notes");
     }
+
+    #[test]
+    fn summary_reads_manifest_head_without_scanning_sibling() {
+        let dir = tempfile::tempdir().unwrap();
+        let notes = dir.path().join("notes-folder");
+        let archive = dir.path().join("archive-folder");
+        std::fs::create_dir_all(notes.join("pages")).unwrap();
+        std::fs::create_dir_all(archive.join("nested/deep")).unwrap();
+        std::fs::write(notes.join("pages/ignored.md"), "not a scan target").unwrap();
+        std::fs::write(archive.join("nested/deep/secret.md"), "sibling body").unwrap();
+
+        let manifest = WorkspaceManifest::new("Research Notes");
+        manifest
+            .save(&notes.join(WORKSPACE_MANIFEST_FILENAME))
+            .unwrap();
+
+        let notes_summary = summary_from_registry_entry(
+            &RegistryWorkspace {
+                workspace_id: "ws-notes".into(),
+                root: notes,
+                remote_access_enabled: false,
+            },
+            "file",
+        );
+        assert_eq!(notes_summary.title, "Research Notes");
+        assert!(notes_summary.manifest_present);
+
+        let archive_summary = summary_from_registry_entry(
+            &RegistryWorkspace {
+                workspace_id: "ws-archive".into(),
+                root: archive,
+                remote_access_enabled: false,
+            },
+            "file",
+        );
+        assert!(!archive_summary.manifest_present);
+        assert_eq!(archive_summary.title, "archive-folder");
+    }
 }

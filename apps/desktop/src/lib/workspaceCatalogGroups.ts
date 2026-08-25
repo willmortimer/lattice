@@ -3,6 +3,7 @@ import {
   workspaceCatalogDisplayName,
   type WorkspaceCatalog,
   type WorkspaceCatalogEntry,
+  type WorkspaceSummary,
 } from "./workspaceCatalog";
 
 export type WorkspaceCatalogStatus = "available" | "remote" | "offline";
@@ -46,15 +47,34 @@ export function workspaceCatalogStatusLabel(status: WorkspaceCatalogStatus): str
   }
 }
 
+/**
+ * Card title for a catalog row: manifest summary when present, else recents, else path leaf.
+ * Does not open or scan workspace roots.
+ */
+export function workspaceCatalogRowTitle(
+  entry: WorkspaceCatalogEntry,
+  options?: {
+    recentTitle?: string | null;
+    summary?: WorkspaceSummary | null;
+  },
+): string {
+  const summaryTitle = options?.summary?.manifestPresent ? options.summary.title.trim() : "";
+  if (summaryTitle) return summaryTitle;
+  const recentTitle = options?.recentTitle?.trim() ?? "";
+  if (recentTitle) return recentTitle;
+  return workspaceCatalogDisplayName(entry);
+}
+
 function rowFromEntry(
   entry: WorkspaceCatalogEntry,
   section: WorkspaceCatalogSection,
   daemonReachable: boolean,
-  titleOverride?: string,
+  recentTitle?: string,
+  summary?: WorkspaceSummary | null,
 ): WorkspaceCatalogRow {
   return {
     entry,
-    title: titleOverride?.trim() || workspaceCatalogDisplayName(entry),
+    title: workspaceCatalogRowTitle(entry, { recentTitle, summary }),
     location: entry.root,
     status: workspaceCatalogStatus(entry, daemonReachable),
     section,
@@ -63,12 +83,14 @@ function rowFromEntry(
 
 /**
  * Partition registry catalog metadata into pinned / recent / remaining.
- * Never opens or scans workspace roots — titles come from path leaf or recent titles.
+ * Never opens or scans workspace roots — titles come from get_workspace_summary
+ * (manifest head) when provided, otherwise recents or the path leaf.
  */
 export function groupWorkspaceCatalog(args: {
   catalog: WorkspaceCatalog | null | undefined;
   recents: readonly RecentWorkspace[];
   pinnedRoot?: string | null;
+  summaries?: ReadonlyMap<string, WorkspaceSummary> | null;
 }): {
   pinned: WorkspaceCatalogRow[];
   recent: WorkspaceCatalogRow[];
@@ -90,7 +112,15 @@ export function groupWorkspaceCatalog(args: {
       const recentTitle = args.recents.find(
         (recent) => normalizeWorkspaceRoot(recent.root) === pinnedRoot,
       )?.title;
-      pinned.push(rowFromEntry(entry, "pinned", daemonReachable, recentTitle));
+      pinned.push(
+        rowFromEntry(
+          entry,
+          "pinned",
+          daemonReachable,
+          recentTitle,
+          args.summaries?.get(entry.workspaceId),
+        ),
+      );
       pinnedIds.add(entry.workspaceId);
     }
   }
@@ -100,7 +130,15 @@ export function groupWorkspaceCatalog(args: {
   for (const recentEntry of args.recents) {
     const entry = byRoot.get(normalizeWorkspaceRoot(recentEntry.root));
     if (!entry || pinnedIds.has(entry.workspaceId) || recentIds.has(entry.workspaceId)) continue;
-    recent.push(rowFromEntry(entry, "recent", daemonReachable, recentEntry.title));
+    recent.push(
+      rowFromEntry(
+        entry,
+        "recent",
+        daemonReachable,
+        recentEntry.title,
+        args.summaries?.get(entry.workspaceId),
+      ),
+    );
     recentIds.add(entry.workspaceId);
   }
 
@@ -111,10 +149,29 @@ export function groupWorkspaceCatalog(args: {
     if (recentIds.has(entry.workspaceId)) {
       return recent.find((row) => row.entry.workspaceId === entry.workspaceId)!;
     }
-    return rowFromEntry(entry, "all", daemonReachable);
+    return rowFromEntry(
+      entry,
+      "all",
+      daemonReachable,
+      undefined,
+      args.summaries?.get(entry.workspaceId),
+    );
   });
 
   return { pinned, recent, all };
+}
+
+/** Workspace ids shown on Home (pinned + recent, or the registered list). */
+export function visibleWorkspaceCatalogIds(grouped: {
+  pinned: readonly WorkspaceCatalogRow[];
+  recent: readonly WorkspaceCatalogRow[];
+  all: readonly WorkspaceCatalogRow[];
+}): string[] {
+  const rows =
+    grouped.pinned.length === 0 && grouped.recent.length === 0
+      ? grouped.all
+      : [...grouped.pinned, ...grouped.recent];
+  return rows.map((row) => row.entry.workspaceId);
 }
 
 export function filterWorkspaceCatalogRows(

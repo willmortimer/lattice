@@ -52,6 +52,7 @@ export {
 } from "./useVoiceStatusQuery";
 export {
   useWorkspaceCatalogQuery,
+  useWorkspaceSummaryQueries,
   useWorkspaceSummaryQuery,
   workspaceCatalogQueryOptions,
   workspaceSummaryQueryOptions,
