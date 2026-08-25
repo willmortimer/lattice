@@ -60,6 +60,7 @@ export interface WorkspaceCloudSyncSnapshot {
 }
 
 export const WORKSPACE_CLOUD_SYNC_DEBOUNCE_MS = 2_000;
+export const WORKSPACE_CLOUD_SYNC_POLL_MS = 30_000;
 
 const IDLE_SNAPSHOT: WorkspaceCloudSyncSnapshot = {
   phase: "idle",
@@ -173,6 +174,7 @@ export interface CloudSyncLoopOptions {
 export class CloudSyncLoop {
   private readonly debounceMs: number;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
   private inFlight: Promise<WorkspaceSyncRunReport | null> | null = null;
   private unlistenSession: (() => void) | null = null;
   private saveUnsubscribe: (() => void) | null = null;
@@ -197,8 +199,10 @@ export class CloudSyncLoop {
     void this.saveUnsubscribe?.();
     void listen<CloudSessionStatus>("cloud-session-changed", (event) => {
       if (event.payload.signedIn) {
+        this.startPolling();
         this.scheduleSync("reconnect");
       } else {
+        this.stopPolling();
         this.onSnapshot(IDLE_SNAPSHOT);
         this.onSyncBadges({});
       }
@@ -209,6 +213,16 @@ export class CloudSyncLoop {
       }
       this.unlistenSession = unlisten;
     });
+    // Already-signed-in sessions never emit cloud-session-changed; probe once so
+    // the 30s poll still surfaces another machine's Keep local without Sync now.
+    void getCloudSessionStatus()
+      .then((session) => {
+        if (this.disposed || !session.signedIn) return;
+        this.startPolling();
+      })
+      .catch(() => {
+        // Probe is best-effort; sign-in still starts polling via cloud-session-changed.
+      });
   }
 
   attachSaveStatusSubscription(
@@ -242,10 +256,10 @@ export class CloudSyncLoop {
     }
   }
 
-  scheduleSync(reason: "save" | "reconnect" | "manual"): void {
+  scheduleSync(reason: "save" | "reconnect" | "manual" | "poll"): void {
     if (inBrowser || !this.workspaceRoot) return;
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    const delay = reason === "manual" ? 0 : this.debounceMs;
+    const delay = reason === "manual" || reason === "poll" ? 0 : this.debounceMs;
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null;
       void this.runNow();
@@ -308,11 +322,27 @@ export class CloudSyncLoop {
 
   dispose(): void {
     this.disposed = true;
+    this.stopPolling();
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = null;
     void this.unlistenSession?.();
     void this.saveUnsubscribe?.();
     this.unlistenSession = null;
     this.saveUnsubscribe = null;
+  }
+
+  private startPolling(): void {
+    if (this.pollTimer != null || this.disposed || inBrowser || !this.workspaceRoot) return;
+    this.pollTimer = setInterval(() => {
+      if (this.disposed || inBrowser || !this.workspaceRoot || this.inFlight) return;
+      this.scheduleSync("poll");
+    }, WORKSPACE_CLOUD_SYNC_POLL_MS);
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer == null) return;
+    clearInterval(this.pollTimer);
+    this.pollTimer = null;
   }
 }
 
