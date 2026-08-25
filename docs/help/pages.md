@@ -16,4 +16,5 @@ description: Create a Markdown note in a few clicks.
 - Press **⌘/Ctrl+N** for a quick capture note when you are mid-flow.
 
 Your page is a Markdown file in the folder. Other editors can open it too. In
-Finder, select the file and press **Space** to preview the rendered page.
+Finder, select the file and press **Space** to preview the rendered page, not
+the source.

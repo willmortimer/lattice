@@ -34,11 +34,11 @@ Use the tabs across the top of Inspect:
 | **diagnostics** | Errors and reconciliation status |
 
 **Authority** tells you who owns the canonical copy (for example **Local** or
-**Cloud**). **Editing authority** shows how the page is being edited when
-collaborative editing is available: **Plain file** or **Collaborative**. That is
-separate from **Authority** — it does not mean the file is backed up to the
-cloud. **Materialization** tells you how much of the file is present on disk
-(for example **Cached** or **Metadata only**).
+**Cloud**). **Editing authority** shows how the page is being edited:
+**Plain file** or **Collaborative**. That is separate from **Authority** — it
+does not mean the file is backed up to the cloud. **Materialization** tells you
+how much of the file is present on disk (for example **Cached** or **Metadata
+only**).
 
 ## Back up to Lattice Cloud
 
@@ -83,15 +83,29 @@ only when there is a conflict — nothing is overwritten until you choose.
 ## Encrypted workspace backup
 
 This is a snapshot of the **whole workspace**, not one file. It is not the same
-as **Back up to Lattice Cloud**.
+as **Back up to Lattice Cloud**. You need an open workspace to **back up**.
+
+**Back up** (workspace already open):
 
 1. Sign in under **Settings → Cloud account**.
-2. Under **Encrypted workspace backup**, click **Back up workspace** to upload.
-3. Pick a previous backup from the list, choose a destination folder, and
-   restore. Existing files with different content are skipped.
+2. Under **Encrypted workspace backup**, click **Back up workspace**.
 
-**Inspect → properties** can restore a picked backup into the **open**
-workspace. Use **Settings → Cloud account** when you want a different folder.
+**Restore on a new Mac** (empty Lattice, no workspace yet):
+
+1. Click **Sign in to Lattice Cloud**, then **Restore encrypted backup**.
+2. Pick a cloud workspace, a backup, and a destination folder.
+3. Click **Restore backup**. Lattice opens that folder as the workspace.
+
+You do not need to create a Personal workspace first.
+
+**Restore when a workspace is already open:**
+
+- **Settings → Cloud account → Encrypted workspace backup** — pick a backup
+  and a destination folder, then **Restore backup**.
+- **Inspect → properties** can restore a picked backup into the **open**
+  workspace.
+
+Existing files with different content are skipped.
 
 ## File conflicts vs cloud
 

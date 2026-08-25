@@ -52,6 +52,16 @@ describe("help search filter", () => {
     expect(clipMatches.some((page) => page.stem === "capture")).toBe(true);
     const openWithMatches = filterHelpPages(CORPUS.pages, "Open With");
     expect(openWithMatches.some((page) => page.stem === "what-to-click")).toBe(true);
+    const addFolderMatches = filterHelpPages(CORPUS.pages, "Add folder");
+    expect(addFolderMatches.some((page) => page.stem === "what-to-click")).toBe(true);
+    expect(addFolderMatches.some((page) => page.stem === "first-workspace")).toBe(true);
+    const restoreMatches = filterHelpPages(CORPUS.pages, "Restore encrypted backup");
+    expect(restoreMatches.some((page) => page.stem === "what-to-click")).toBe(true);
+    expect(restoreMatches.some((page) => page.stem === "first-workspace")).toBe(true);
+    const whatToClick = findHelpPageByStem(CORPUS.pages, "what-to-click");
+    expect(whatToClick?.body).toMatch(
+      /Activity rail[\s\S]*Home, Files, Search, Quick Capture, \*\*agent\*\* \(robot\), \*\*Help\*\*, Settings/,
+    );
     expect(filterHelpPages(CORPUS.pages, "zzzz-not-in-help")).toHaveLength(0);
   });
 });

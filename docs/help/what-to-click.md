@@ -25,10 +25,21 @@ open **Inspect** on that item or **Show agent** for help with the workspace.
 
 - **Back up a file** — select it, **Inspect → properties → Back up to Lattice Cloud**
   (requires **Settings → Cloud account**).
-- **Restore a workspace** — **Settings → Cloud account → Encrypted workspace backup**
-  (pick a backup and a folder). Inspect restores into the open workspace.
+- **Back up this workspace** — **Settings → Cloud account → Encrypted workspace
+  backup → Back up workspace** (needs an open workspace).
+- **Restore on a new Mac** — empty Lattice: **Sign in to Lattice Cloud**, then
+  **Restore encrypted backup** (pick a cloud workspace, backup, and folder). You
+  do not need to create Personal first. See [Open a workspace](first-workspace.md).
+- **Restore with a workspace open** — **Settings → Cloud account → Encrypted
+  workspace backup**, or Inspect for the open workspace.
 - **Shared page editing** — **Plain file** / **Collaborative** on pages with a
   resource ID (see [Collaborative pages](collaboration.md)).
 - **Screenshot to inbox** — **⌘⇧2** (Screen Clip), then open **Capture Inbox** in Files.
 - **Open a PDF or image from Finder** — right-click → **Open With → Lattice**.
-  Lattice is a viewer for those files, not the default app.
+  Lattice is a viewer for those files, not the default app. Markdown stays the
+  editor.
+- **Add a folder from Finder** — select the folder, then **Services → Add folder
+  to Lattice**, or use the in-app existing-folder dialog. Opening a stray file
+  does not wrap its parent folder as a workspace.
+- **Preview Markdown in Finder** — select the file and press **Space** for
+  rendered Markdown, not the source.
