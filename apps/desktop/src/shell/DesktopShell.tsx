@@ -75,6 +75,7 @@ import {
   type AgentDetachedClosedPayload,
 } from "../agent/agentDetachedWindow";
 import { useAgentSessionStore } from "../agent/agentStore";
+import { EmptyCloudRestorePanel } from "./EmptyCloudRestorePanel";
 
 const SettingsPage = lazy(() =>
   import("../settings/SettingsPage").then((module) => ({ default: module.SettingsPage })),
@@ -120,6 +121,7 @@ export interface DesktopShellProps { model: ReturnType<typeof useDesktopControll
 export function DesktopShell({ model }: DesktopShellProps) {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [browserActiveFolderPath, setBrowserActiveFolderPath] = useState<string | null>(null);
+  const [emptyRestorePanel, setEmptyRestorePanel] = useState<"sign-in" | "restore" | null>(null);
   const {
     profile, profileReady, settings, startup, snapshot, catalog, catalogDelta, selected, selectedResourceIds, session, error, busy,
     externalConflict, reloadToken, newWorkspaceOpen, newWorkspacePrefill, workspacesDir, templates, statusToast,
@@ -335,8 +337,9 @@ export function DesktopShell({ model }: DesktopShellProps) {
           <h1 className="empty-wordmark">Lattice</h1>
           <p className="empty-copy">
             Create a Personal workspace, choose a template from the gallery, or
-            open a folder that already contains <code>lattice.yaml</code>. Lattice
-            never restores externally deleted workspace content automatically.
+            open a folder that already contains <code>lattice.yaml</code>. On a
+            new computer, sign in and restore an encrypted backup. Lattice never
+            restores externally deleted workspace content automatically.
           </p>
           {profileNotices.map((notice) => (
             <div className="profile-notice profile-notice-empty" role="status" key={notice.code}>
@@ -362,7 +365,28 @@ export function DesktopShell({ model }: DesktopShellProps) {
             <button className="secondary-button" onClick={() => void handleOpenWorkspace()} disabled={busy}>
               Open existing workspace…
             </button>
+            <button
+              className="secondary-button"
+              onClick={() => setEmptyRestorePanel("sign-in")}
+              disabled={busy}
+            >
+              Sign in to Lattice Cloud
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => setEmptyRestorePanel("restore")}
+              disabled={busy}
+            >
+              Restore encrypted backup
+            </button>
           </div>
+          {emptyRestorePanel && (
+            <EmptyCloudRestorePanel
+              panel={emptyRestorePanel}
+              shellBusy={busy}
+              onOpenRestoredWorkspace={openRecent}
+            />
+          )}
           {recents.length > 0 && (
             <div className="recent-workspaces">
               <div className="recent-heading">Recent</div>

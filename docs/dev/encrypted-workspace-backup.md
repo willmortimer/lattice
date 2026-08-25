@@ -76,5 +76,10 @@ Tauri: `list_account_cloud_workspaces_cmd`,
 `listEncryptedBackupsForCloudWorkspace(cloudWorkspaceId)`,
 `restoreEncryptedBackupForCloudWorkspace(cloudWorkspaceId, targetRoot, backupId)`.
 
+The empty desktop shell (no open workspace) exposes **Sign in to Lattice Cloud**
+and **Restore encrypted backup**. That path uses the account-scoped commands
+above, then `open_workspace` on the chosen folder. It does not create Personal
+or call `ensure_cloud_workspace`.
+
 See also: ecosystem `lattice-cloud` `cloud_api.rs` backup handlers and
 `docs/architecture/cloud-backend-dag.md` (CB2 opaque backup).
