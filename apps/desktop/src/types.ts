@@ -28,6 +28,7 @@ export interface WorkspaceSnapshot {
   root: string;
   title: string;
   id: string;
+  /** May be empty after `open_workspace`; tree hydrates via list_children + catalog-delta. */
   resources: Resource[];
   capabilities: string[];
   defaults: {

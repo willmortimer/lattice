@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyCatalogDelta,
   catalogEntriesFromResources,
+  catalogFromOpenSnapshot,
   catalogMapFromResources,
   displayResourceIdForPath,
   isSyntheticResourceId,
@@ -13,6 +14,7 @@ import {
   resourceIdForPath,
   resourceIdForPathOrSynthetic,
   resourcesFromCatalog,
+  seedCatalogFromListChildrenPage,
   syntheticResourceId,
   type CatalogEntry,
 } from "./resourceCatalog";
@@ -163,5 +165,43 @@ describe("resourceCatalog", () => {
       resourceId: syntheticResourceId("Notes.md"),
       isSynthetic: true,
     });
+  });
+
+  it("catalogFromOpenSnapshot does not require a snapshot.resources dump", () => {
+    expect(catalogFromOpenSnapshot([]).size).toBe(0);
+    expect(catalogFromOpenSnapshot(undefined).size).toBe(0);
+
+    const seeded = catalogFromOpenSnapshot([resource("root.md")]);
+    expect(seeded.size).toBe(1);
+    expect(resourceIdForPath(seeded, "root.md")).toBe(syntheticResourceId("root.md"));
+  });
+
+  it("catalog seeds from list_children pages and catalog-delta without a full dump", () => {
+    let catalog = catalogFromOpenSnapshot([]);
+    expect(catalog.size).toBe(0);
+
+    catalog = seedCatalogFromListChildrenPage(catalog, {
+      children: [entry("notes-id", "Notes", "folder"), entry("root-id", "root.md")],
+    });
+    expect(catalog.size).toBe(2);
+    expect(catalog.get("notes-id")?.kind).toBe("folder");
+    expect(catalog.get("root-id")?.path).toBe("root.md");
+
+    catalog = seedCatalogFromListChildrenPage(catalog, {
+      children: [entry("nested-id", "Notes/a.md")],
+    });
+    expect(catalog.size).toBe(3);
+    expect(pathForResourceId(catalog, "nested-id")).toBe("Notes/a.md");
+
+    catalog = applyCatalogDelta(catalog, {
+      type: "upsert",
+      entries: [entry("nested-id", "Notes/renamed.md")],
+    });
+    expect(pathForResourceId(catalog, "nested-id")).toBe("Notes/renamed.md");
+    expect(resourcesFromCatalog(catalog).map((item) => item.path)).toEqual([
+      "Notes",
+      "Notes/renamed.md",
+      "root.md",
+    ]);
   });
 });

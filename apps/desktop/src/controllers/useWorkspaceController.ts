@@ -13,8 +13,10 @@ import { useWorkspaceUiSessionStore } from "../shell/workspaceUiSessionStore";
 import { refreshResourceCatalog } from "../lib/resourceLinks";
 import {
   applyCatalogDelta,
-  catalogMapFromResources,
+  catalogFromOpenSnapshot,
+  listChildren,
   resourcesFromCatalog,
+  seedCatalogFromListChildrenPage,
   type CatalogDelta,
   type CatalogDeltaEvent,
   type CatalogEntry,
@@ -69,7 +71,7 @@ export interface WorkspaceController {
   handleWorkspaceChanged: (event: WorkspaceChangeEvent) => Promise<void>;
   applyCatalogDeltaEvent: (event: CatalogDeltaEvent) => void;
   refreshResources: () => Promise<void>;
-  /** Replace catalog from a flat resource list (browser demo mutations / full scan). */
+  /** Replace catalog from a flat resource list (browser demo / explicit full scan). Empty is valid. */
   seedCatalogFromResources: (resources: readonly Resource[]) => void;
   handleGetStarted: () => Promise<void>;
   handleOpenWorkspace: () => Promise<void>;
@@ -98,7 +100,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   } = options;
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(initialSnapshot);
   const [catalog, setCatalog] = useState<ReadonlyMap<string, CatalogEntry>>(() =>
-    catalogMapFromResources(initialSnapshot?.resources ?? []),
+    catalogFromOpenSnapshot(initialSnapshot?.resources),
   );
   const [catalogDelta, setCatalogDelta] = useState<CatalogDelta | null>(null);
   const [workspacesDir, setWorkspacesDir] = useState<string | null>(null);
@@ -137,7 +139,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   const getCatalog = useCallback(() => catalogRef.current, []);
 
   const seedCatalogFromResources = useCallback((resources: readonly Resource[]) => {
-    const next = catalogMapFromResources(resources);
+    const next = catalogFromOpenSnapshot(resources);
     publishCatalog(next, { type: "replace", entries: [...next.values()] });
   }, [publishCatalog]);
 
@@ -159,11 +161,28 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     void stopWatching();
   }, [stopWatching]);
 
+  const hydrateCatalogFromListChildren = useCallback(async (root: string) => {
+    let cursor: string | undefined;
+    try {
+      do {
+        const page = await listChildren({ root, cursor, limit: 100 });
+        if (snapshotRef.current?.root !== root) return;
+        if (page.children.length > 0) {
+          const next = seedCatalogFromListChildrenPage(catalogRef.current, page);
+          publishCatalog(next, { type: "upsert", entries: page.children });
+        }
+        cursor = page.nextCursor;
+      } while (cursor);
+    } catch {
+      // Root listing can fail while a workspace is closing; deltas still apply.
+    }
+  }, [publishCatalog]);
+
   const adoptWorkspace = useCallback(async (next: WorkspaceSnapshot) => {
     await persistOutgoingWorkspaceUiSession();
     if (watchingRootRef.current && watchingRootRef.current !== next.root) await stopWatching();
     snapshotRef.current = next;
-    const nextCatalog = catalogMapFromResources(next.resources);
+    const nextCatalog = catalogFromOpenSnapshot(next.resources);
     catalogRef.current = nextCatalog;
     setCatalog(nextCatalog);
     setCatalogDelta({ type: "replace", entries: [...nextCatalog.values()] });
@@ -184,8 +203,11 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     }
     if (hasTauri || inBridgeMode) {
       void invoke("rebuild_index", { root: next.root }).catch(() => undefined);
+      if (next.resources.length === 0) {
+        void hydrateCatalogFromListChildren(next.root);
+      }
     }
-  }, [onAdopt, persistOutgoingWorkspaceUiSession, rememberWorkspace, stopWatching]);
+  }, [hydrateCatalogFromListChildren, onAdopt, persistOutgoingWorkspaceUiSession, rememberWorkspace, stopWatching]);
 
   const applyCatalogDeltaEvent = useCallback((event: CatalogDeltaEvent) => {
     const root = snapshotRef.current?.root;
@@ -350,8 +372,11 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
       setNewWorkspaceOpen(false);
       const pathToOpen = templates.find((template) => template.id === args.template)?.openOnCreate;
       if (pathToOpen) {
-        const resource = outcome.workspace.resources.find((entry) => entry.path === pathToOpen);
-        if (resource) await openResource(resource);
+        const resource = outcome.workspace.resources.find((entry) => entry.path === pathToOpen) ?? {
+          path: pathToOpen,
+          kind: "page" as const,
+        };
+        await openResource(resource);
       }
     } catch (error) {
       setError(String(error));

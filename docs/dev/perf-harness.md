@@ -55,8 +55,9 @@ Add harness coverage for:
 
 When profiling regressions, prefer First Look tree virtualization, theme
 resolve IPC, font-pack CSS (only the active pack loads at startup), and
-`ensure_home` / `open_workspace` / `prepare_quick_note` scan cost over expanding
-the Playwright harness itself.
+`ensure_home` / `list_children` / `prepare_quick_note` scan cost over expanding
+the Playwright harness itself. `open_workspace` returns identity only (empty
+`resources`); the tree hydrates via `list_children` and `catalog-delta`.
 
 ### Sprint stubs (hotpath + agent workbench)
 

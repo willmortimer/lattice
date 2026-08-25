@@ -6,8 +6,11 @@ use lattice_runtime::{default_runtime, LatticeRuntime, WorkspaceSession};
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
 
-/// Everything the frontend needs to render a workspace: its identity plus
-/// the flat resource listing from [`Workspace::scan`].
+/// Workspace identity the frontend needs to adopt a session.
+///
+/// `resources` is kept for serde compatibility but is **not** filled by a
+/// full-tree [`Workspace::scan`]. The active tree hydrates via `list_children`
+/// and `catalog-delta`. Explicit callers still use [`list_resources`].
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSnapshot {
@@ -74,8 +77,7 @@ pub fn list_resources_with_session(session: &WorkspaceSession) -> Result<Vec<Res
 }
 
 pub fn snapshot_from_workspace(workspace: &Workspace) -> Result<WorkspaceSnapshot, String> {
-    let resources = workspace.scan().map_err(|err| err.to_string())?;
-    snapshot_from_parts(workspace, resources)
+    snapshot_from_parts(workspace, Vec::new())
 }
 
 pub(crate) fn snapshot_from_parts(
@@ -130,17 +132,92 @@ mod tests {
     }
 
     #[test]
-    fn open_workspace_returns_snapshot_with_resources() {
+    fn open_workspace_returns_identity_without_scanning_resources() {
         let _guard = env_lock();
         let dir = init_workspace();
+        std::fs::create_dir_all(dir.path().join("Notes/nested")).unwrap();
         std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
+        std::fs::write(dir.path().join("Notes/nested/deep.md"), "# Deep\n").unwrap();
 
         let snapshot = open_workspace(dir.path().to_string_lossy().into_owned()).unwrap();
         assert_eq!(snapshot.title, "Test Workspace");
-        assert!(snapshot
-            .resources
+        assert!(!snapshot.id.is_empty());
+        assert!(snapshot.resources.is_empty());
+        assert!(!snapshot.manifest_revision.is_empty());
+
+        let root = dir.path().to_string_lossy().into_owned();
+        let page = crate::list_children(root, None, None, None, Some(10)).unwrap();
+        let root_paths: Vec<_> = page.children.iter().map(|e| e.path.as_str()).collect();
+        assert!(root_paths.contains(&"Notes.md"));
+        assert!(root_paths.contains(&"Notes"));
+        assert!(!root_paths.iter().any(|path| path.contains("nested")));
+    }
+
+    #[test]
+    fn open_workspace_does_not_enumerate_a_large_tree_in_resources() {
+        let _guard = env_lock();
+        let dir = init_workspace();
+        std::fs::create_dir_all(dir.path().join("bulk/nested")).unwrap();
+        for index in 0..80 {
+            std::fs::write(
+                dir.path().join(format!("bulk/file-{index:02}.md")),
+                format!("# {index}\n"),
+            )
+            .unwrap();
+        }
+        std::fs::write(dir.path().join("bulk/nested/leaf.md"), "# leaf\n").unwrap();
+
+        let snapshot = open_workspace(dir.path().to_string_lossy().into_owned()).unwrap();
+        assert!(!snapshot.id.is_empty());
+        assert_eq!(snapshot.title, "Test Workspace");
+        assert!(
+            snapshot.resources.is_empty(),
+            "open_workspace must not scan the tree into resources"
+        );
+
+        let nested = crate::list_children(
+            dir.path().to_string_lossy().into_owned(),
+            None,
+            Some("bulk/nested".into()),
+            None,
+            Some(10),
+        )
+        .unwrap();
+        assert!(
+            nested
+                .children
+                .iter()
+                .any(|entry| entry.path == "bulk/nested/leaf.md"),
+            "list_children still lists nested files after identity-only open"
+        );
+    }
+
+    #[test]
+    fn open_workspace_does_not_scan_a_sibling_workspace() {
+        let _guard = env_lock();
+        let workspace_a = init_workspace();
+        let workspace_b = init_workspace();
+        std::fs::write(workspace_a.path().join("only-in-a.md"), "# A\n").unwrap();
+        std::fs::write(workspace_b.path().join("only-in-b.md"), "# B\n").unwrap();
+
+        let snapshot_b = open_workspace(workspace_b.path().to_string_lossy().into_owned()).unwrap();
+        assert!(snapshot_b.resources.is_empty());
+
+        let listed_b = crate::list_children(
+            workspace_b.path().to_string_lossy().into_owned(),
+            None,
+            None,
+            None,
+            Some(10),
+        )
+        .unwrap();
+        let b_paths: Vec<_> = listed_b
+            .children
             .iter()
-            .any(|r| r.path.ends_with("Notes.md")));
+            .map(|entry| entry.path.as_str())
+            .collect();
+        assert!(b_paths.contains(&"only-in-b.md"));
+        assert!(!b_paths.contains(&"only-in-a.md"));
     }
 
     #[test]

@@ -2,8 +2,9 @@
  * Workspace resource catalog projection helpers.
  *
  * Mirrors `lattice_handlers::catalog` (C0) for shell-side incremental updates
- * from `catalog-delta` Tauri events. The flat `Resource[]` on
- * `WorkspaceSnapshot` is derived from the id-keyed catalog map.
+ * from `list_children` pages and `catalog-delta` Tauri events. The flat
+ * `Resource[]` on `WorkspaceSnapshot` is derived from the id-keyed catalog
+ * map and may be empty on open (identity-only snapshot).
  */
 import { invoke } from "./ipc";
 import type { Resource, ResourceKind } from "../types";
@@ -120,6 +121,26 @@ export function resourcesFromCatalog(catalog: ReadonlyMap<string, CatalogEntry>)
 export function catalogMapFromResources(resources: readonly Resource[]): Map<string, CatalogEntry> {
   const entries = catalogEntriesFromResources(resources);
   return applyCatalogDelta(new Map(), { type: "replace", entries });
+}
+
+/**
+ * Seed catalog from an open snapshot. Empty `resources` is valid: the tree
+ * hydrates via `list_children` pages and `catalog-delta` events instead of a
+ * full-tree dump.
+ */
+export function catalogFromOpenSnapshot(
+  resources: readonly Resource[] | undefined,
+): Map<string, CatalogEntry> {
+  return catalogMapFromResources(resources ?? []);
+}
+
+/** Upsert one `list_children` page into the catalog (incremental hydration). */
+export function seedCatalogFromListChildrenPage(
+  catalog: ReadonlyMap<string, CatalogEntry>,
+  page: ListChildrenPage,
+): Map<string, CatalogEntry> {
+  if (page.children.length === 0) return new Map(catalog);
+  return applyCatalogDelta(catalog, { type: "upsert", entries: page.children });
 }
 
 /** Reverse index: workspace-relative path → catalog resourceId. */
