@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::deep_link::{OpenResourcePayload, OpenUnregisteredPayload};
+use crate::deep_link::{OpenResourcePayload, OpenUnregisteredPayload, UnregisteredKind};
 
 const LATTICE_DIR: &str = ".lattice";
 const LATTICE_MANIFEST: &str = "lattice.yaml";
@@ -34,6 +34,7 @@ pub fn open_payload_for_file(path: &Path) -> OpenFileAction {
         }
         None => OpenFileAction::Unregistered(OpenUnregisteredPayload {
             path: file.display().to_string(),
+            kind: unregistered_kind(&file),
         }),
     }
 }
@@ -46,6 +47,14 @@ fn find_workspace_root(file: &Path) -> Option<PathBuf> {
 
 fn is_workspace_root(dir: &Path) -> bool {
     dir.join(LATTICE_DIR).is_dir() || dir.join(LATTICE_MANIFEST).is_file()
+}
+
+fn unregistered_kind(path: &Path) -> UnregisteredKind {
+    if path.is_dir() {
+        UnregisteredKind::Folder
+    } else {
+        UnregisteredKind::File
+    }
 }
 
 #[cfg(test)]
@@ -126,6 +135,7 @@ mod tests {
         match open_payload_for_file(&stray) {
             OpenFileAction::Unregistered(payload) => {
                 assert_eq!(payload.path, display_canonical(&stray));
+                assert_eq!(payload.kind, UnregisteredKind::File);
             }
             other => panic!("expected unregistered, got {other:?}"),
         }
@@ -138,8 +148,24 @@ mod tests {
         match open_payload_for_file(dir.path()) {
             OpenFileAction::Unregistered(payload) => {
                 assert_eq!(payload.path, display_canonical(dir.path()));
+                assert_eq!(payload.kind, UnregisteredKind::Folder);
             }
             other => panic!("expected unregistered, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unregistered_file_does_not_wrap_parent_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let stray = dir.path().join("notes.md");
+        fs::write(&stray, "hello").unwrap();
+
+        match open_payload_for_file(&stray) {
+            OpenFileAction::Unregistered(payload) => {
+                assert_eq!(payload.kind, UnregisteredKind::File);
+                assert_ne!(payload.path, display_canonical(dir.path()));
+            }
+            other => panic!("expected unregistered file, got {other:?}"),
         }
     }
 }

@@ -25,6 +25,10 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  initialNewWorkspaceDialogState,
+  type NewWorkspaceDialogMode,
+} from "./lib/offerUnregisteredWorkspace";
 import type { TemplateCategory, TemplateDescriptor } from "./lib/templates";
 
 const GALLERY_CATEGORIES: TemplateCategory[] = [
@@ -40,6 +44,8 @@ interface NewWorkspaceDialogProps {
   templates: TemplateDescriptor[];
   workspacesDir: string | null;
   hasValidDefault: boolean;
+  /** Prefills initialize-existing so Finder / unregistered folder opens skip re-picking. */
+  existingFolderPath?: string | null;
   onCancel: () => void;
   onPickFolder: () => Promise<string | null>;
   onCreate: (args: {
@@ -68,6 +74,7 @@ export function NewWorkspaceDialog({
   templates,
   workspacesDir,
   hasValidDefault,
+  existingFolderPath = null,
   onCancel,
   onPickFolder,
   onCreate,
@@ -90,7 +97,7 @@ export function NewWorkspaceDialog({
   const [title, setTitle] = useState("Personal");
   const [titleTouched, setTitleTouched] = useState(false);
   const [parentPath, setParentPath] = useState<string | null>(null);
-  const [mode, setMode] = useState<"new-child" | "existing">("new-child");
+  const [mode, setMode] = useState<NewWorkspaceDialogMode>("new-child");
   const [makeDefault, setMakeDefault] = useState(!hasValidDefault);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,24 +109,30 @@ export function NewWorkspaceDialog({
       ? `${selectedParent.replace(/[/\\]$/, "")}/${childName}`
       : parentPath;
 
+  const folderPrefill = existingFolderPath?.trim() || null;
+
   useEffect(() => {
     if (!open) return;
+    const initial = initialNewWorkspaceDialogState({
+      hasValidDefault,
+      existingFolderPath: folderPrefill,
+    });
     setTemplateId("personal");
-    setStep("gallery");
-    setTitle("Personal");
-    setTitleTouched(false);
-    setParentPath(null);
-    setMode("new-child");
-    setMakeDefault(!hasValidDefault);
+    setStep(initial.step);
+    setTitle(initial.title);
+    setTitleTouched(initial.titleTouched);
+    setParentPath(initial.parentPath);
+    setMode(initial.mode);
+    setMakeDefault(initial.makeDefault);
     setError(null);
-  }, [hasValidDefault, open]);
+  }, [folderPrefill, hasValidDefault, open]);
 
   function chooseTemplate(template: TemplateDescriptor) {
     setTemplateId(template.id);
     if (!titleTouched) setTitle(template.recommendedTitle);
   }
 
-  async function pickParent(nextMode: "new-child" | "existing") {
+  async function pickParent(nextMode: NewWorkspaceDialogMode) {
     const path = await onPickFolder();
     if (!path) return;
     setMode(nextMode);
@@ -241,9 +254,13 @@ export function NewWorkspaceDialog({
             </>
           ) : (
             <>
-              <DialogTitle className="modal-title">Create {selected?.name}</DialogTitle>
+              <DialogTitle className="modal-title">
+                {folderPrefill ? "Add folder to Lattice" : `Create ${selected?.name}`}
+              </DialogTitle>
               <DialogDescription className="modal-copy">
-                New workspaces are staged and validated before they appear at the destination.
+                {folderPrefill
+                  ? "This folder will be initialized in place. Existing files are never overwritten."
+                  : "New workspaces are staged and validated before they appear at the destination."}
               </DialogDescription>
 
               <label className="modal-field">
@@ -263,17 +280,20 @@ export function NewWorkspaceDialog({
               <RadioGroupRoot
                 className="modal-fieldset"
                 value={mode}
-                onValueChange={(value) => setMode(value as "new-child" | "existing")}
+                onValueChange={(value) => {
+                  if (folderPrefill && value !== "existing") return;
+                  setMode(value as NewWorkspaceDialogMode);
+                }}
                 aria-label="Creation mode"
               >
-                <RadioItem value="new-child" className="modal-radio">
+                <RadioItem value="new-child" className="modal-radio" disabled={busy || Boolean(folderPrefill)}>
                   <RadioIndicator className="modal-radio-dot" />
                   <span>
                     <strong>Create a new named folder</strong>
                     <small>Recommended. The complete workspace commits atomically.</small>
                   </span>
                 </RadioItem>
-                <RadioItem value="existing" className="modal-radio">
+                <RadioItem value="existing" className="modal-radio" disabled={busy}>
                   <RadioIndicator className="modal-radio-dot" />
                   <span>
                     <strong>Initialize this existing folder</strong>
@@ -283,9 +303,13 @@ export function NewWorkspaceDialog({
               </RadioGroupRoot>
 
               <div className="modal-pick-row">
-                <Button onClick={() => void pickParent(mode)}>
+                <Button onClick={() => void pickParent(mode)} disabled={busy}>
                   <FolderOpen size={14} />
-                  {mode === "new-child" ? "Choose parent…" : "Choose folder…"}
+                  {folderPrefill
+                    ? "Choose a different folder…"
+                    : mode === "new-child"
+                      ? "Choose parent…"
+                      : "Choose folder…"}
                 </Button>
                 {mode === "new-child" && !parentPath && workspacesDir && (
                   <span className="modal-code">Using {workspacesDir}</span>
@@ -326,7 +350,7 @@ export function NewWorkspaceDialog({
                   Back
                 </Button>
                 <Button variant="primary" onClick={submit} disabled={busy}>
-                  {busy ? "Creating…" : "Create workspace"}
+                  {busy ? "Creating…" : folderPrefill ? "Add folder" : "Create workspace"}
                 </Button>
               </div>
             </>

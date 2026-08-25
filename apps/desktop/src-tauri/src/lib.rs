@@ -33,6 +33,7 @@ mod kernel;
 mod link_repair;
 mod notification_actions;
 mod open_file;
+mod finder_service;
 mod presence;
 mod profile;
 mod proposals;
@@ -54,6 +55,8 @@ mod watcher;
 mod workflow;
 mod workspace_catalog;
 mod workspace_root;
+
+use std::path::Path;
 
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -115,6 +118,7 @@ pub fn run() {
         })
         .setup(|app| {
             tray::install_tray(app.handle())?;
+            finder_service::install(app.handle());
             app_lock::install_sleep_lock_observer(app.handle());
             #[cfg(feature = "capture")]
             {
@@ -438,15 +442,7 @@ pub fn run() {
             if let tauri::RunEvent::Opened { urls } = event {
                 for url in urls {
                     if let Ok(path) = url.to_file_path() {
-                        match open_file::open_payload_for_file(&path) {
-                            open_file::OpenFileAction::Resource(payload) => {
-                                let _ = app.emit("open-resource", &payload);
-                            }
-                            open_file::OpenFileAction::Unregistered(payload) => {
-                                let _ = app.emit("open-unregistered", &payload);
-                            }
-                        }
-                        show_and_focus_main(app);
+                        dispatch_opened_path(app, &path);
                     }
                 }
             }
@@ -504,4 +500,17 @@ fn show_and_focus_main(app: &AppHandle) {
         let _ = main.show();
         let _ = main.set_focus();
     }
+}
+
+/// Finder Open / NSServices folder-or-file → the same resource or unregistered event.
+pub(crate) fn dispatch_opened_path(app: &AppHandle, path: &Path) {
+    match open_file::open_payload_for_file(path) {
+        open_file::OpenFileAction::Resource(payload) => {
+            let _ = app.emit("open-resource", &payload);
+        }
+        open_file::OpenFileAction::Unregistered(payload) => {
+            let _ = app.emit("open-unregistered", &payload);
+        }
+    }
+    show_and_focus_main(app);
 }

@@ -27,11 +27,21 @@ pub struct OpenResourcePayload {
     pub path: String,
 }
 
+/// Whether an unregistered open is a folder (offer add-as-workspace) or a file (toast).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UnregisteredKind {
+    File,
+    Folder,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenUnregisteredPayload {
     /// Absolute path the OS asked Lattice to open, outside a workspace.
     pub path: String,
+    /// Folders can be initialized as a workspace; stray files stay toast-only.
+    pub kind: UnregisteredKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -210,7 +220,11 @@ fn query_open_payload(parsed: &url::Url) -> Option<OpenResourcePayload> {
 
 fn query_value(parsed: &url::Url, key: &str) -> Option<String> {
     let value = query_value_or_empty(parsed, key);
-    if value.is_empty() { None } else { Some(value) }
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 fn query_value_or_empty(parsed: &url::Url, key: &str) -> String {

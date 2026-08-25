@@ -63,6 +63,10 @@ import { useWorkspaceController } from "./useWorkspaceController";
 import { useDesktopActionsController } from "./desktopActions";
 import { useTreeActionsController } from "./treeActions";
 import { hasTauri, invoke } from "../lib/ipc";
+import {
+  offerForUnregisteredOpen,
+  type UnregisteredOpenPayload,
+} from "../lib/offerUnregisteredWorkspace";
 import { listen } from "@tauri-apps/api/event";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import type { PaletteItem } from "../CommandPalette";
@@ -127,6 +131,30 @@ export function useDesktopController() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const [newWorkspacePrefill, setNewWorkspacePrefill] = useState<string | null>(null);
+  const setNewWorkspaceOpenState = useCallback((open: boolean) => {
+    setNewWorkspaceOpen(open);
+    if (!open) setNewWorkspacePrefill(null);
+  }, []);
+  const offerUnregisteredRef = useRef<(payload: UnregisteredOpenPayload) => void>(() => undefined);
+  offerUnregisteredRef.current = (payload) => {
+    const offer = offerForUnregisteredOpen(payload);
+    switch (offer.action) {
+      case "add-folder":
+        setNewWorkspacePrefill(offer.path);
+        setError(null);
+        setNewWorkspaceOpen(true);
+        return;
+      case "toast":
+        setStatusToast(`Not a Lattice workspace: ${payload.path}`);
+        window.setTimeout(() => setStatusToast(null), 3200);
+        return;
+      default: {
+        const _exhaustive: never = offer;
+        return _exhaustive;
+      }
+    }
+  };
   const [statusToast, setStatusToast] = useState<string | null>(null);
   const [runtimeNotice, setRuntimeNotice] = useState<{
     code: string; title: string; message: string; path: string | null;
@@ -341,7 +369,7 @@ export function useDesktopController() {
     setError,
     setBusy,
     setStatusToast,
-    setNewWorkspaceOpen,
+    setNewWorkspaceOpen: setNewWorkspaceOpenState,
     rememberWorkspace,
     removeRecent,
     refreshProfile,
@@ -353,7 +381,11 @@ export function useDesktopController() {
   });
   const { snapshot, snapshotRef, setSnapshot, catalog, catalogDelta, getCatalog, workspacesDir, templates, adoptWorkspace,
     handleGetStarted, handleOpenWorkspace, openRecent, openWorkspaceById, handleCreateWorkspace,
-    openNewWorkspaceDialog, pickWorkspaceFolder, applyCatalogDeltaEvent, refreshResources, seedCatalogFromResources } = workspaceController;
+    openNewWorkspaceDialog: openNewWorkspaceDialogInner, pickWorkspaceFolder, applyCatalogDeltaEvent, refreshResources, seedCatalogFromResources } = workspaceController;
+  const openNewWorkspaceDialog = useCallback(async () => {
+    setNewWorkspacePrefill(null);
+    await openNewWorkspaceDialogInner();
+  }, [openNewWorkspaceDialogInner]);
   workspaceSnapshotRef.current = snapshot;
   useEffect(() => {
     workspaceSnapshotRef.current = snapshot;
@@ -863,12 +895,8 @@ export function useDesktopController() {
   useEffect(() => {
     if (!hasTauri) return;
     let unlisten: (() => void) | undefined;
-    void listen<{ path: string }>("open-unregistered", (event) => {
-      const path = event.payload.path;
-      console.warn("Opened path is not a Lattice workspace:", path);
-      offerUnregisteredWorkspace(path);
-      setStatusToast(`Not a Lattice workspace: ${path}`);
-      window.setTimeout(() => setStatusToast(null), 3200);
+    void listen<UnregisteredOpenPayload>("open-unregistered", (event) => {
+      offerUnregisteredRef.current(event.payload);
     }).then((stop) => {
       unlisten = stop;
     });
@@ -1255,7 +1283,7 @@ export function useDesktopController() {
 
   return {
     profile, profileReady, settings, startup, snapshot, snapshotRef, catalog, catalogDelta, selected, selectedResourceIds, selectedPaths, session, error, busy,
-    externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast, runtimeNotice,
+    externalConflict, reloadToken, newWorkspaceOpen, newWorkspacePrefill, workspacesDir, templates, statusToast, runtimeNotice,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
     settingsDeepLinkTarget, clearSettingsDeepLink,
     helpDeepLinkStem, clearHelpDeepLink,
@@ -1267,7 +1295,7 @@ export function useDesktopController() {
     openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
     paletteItems, hasCapability, setSettings, setStartup, applyDesktopSettings, applyStartupSettings, setError,
-    setSaveStatus: setActiveSaveStatus, setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen,    setActivityArea, setInspectorOpen, setAgentPanelOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
+    setSaveStatus: setActiveSaveStatus, setNewWorkspaceOpen: setNewWorkspaceOpenState, setSearchPaneOpen, setPaletteOpen,    setActivityArea, setInspectorOpen, setAgentPanelOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
     handleTreeCollapsedPathsChange,
     setLinkPicker,
     setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, refreshProfile, handleGetStarted,
@@ -1293,7 +1321,4 @@ export function useDesktopController() {
     setAppLock,
   };
 }
-
-/** Stub: Add-folder / create workspace UI lands in a follow-up. */
-function offerUnregisteredWorkspace(_path: string) {}
 

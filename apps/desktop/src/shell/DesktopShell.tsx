@@ -122,7 +122,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
   const [browserActiveFolderPath, setBrowserActiveFolderPath] = useState<string | null>(null);
   const {
     profile, profileReady, settings, startup, snapshot, catalog, catalogDelta, selected, selectedResourceIds, session, error, busy,
-    externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
+    externalConflict, reloadToken, newWorkspaceOpen, newWorkspacePrefill, workspacesDir, templates, statusToast,
     setStatusToast,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
     treeCollapsedPaths, revealPath, linkPicker, csvImportReview,
@@ -390,6 +390,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
           templates={templates}
           workspacesDir={workspacesDir ?? profile.workspacesDirectory}
           hasValidDefault={profile.hasValidConfiguredDefault}
+          existingFolderPath={newWorkspacePrefill}
           onCancel={() => setNewWorkspaceOpen(false)}
           onPickFolder={pickWorkspaceFolder}
           onCreate={(args) => void handleCreateWorkspace(args)}
@@ -1110,6 +1111,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
         templates={templates}
         workspacesDir={workspacesDir ?? profile.workspacesDirectory}
         hasValidDefault={profile.hasValidConfiguredDefault}
+        existingFolderPath={newWorkspacePrefill}
         onCancel={() => setNewWorkspaceOpen(false)}
         onPickFolder={pickWorkspaceFolder}
         onCreate={(args) => void handleCreateWorkspace(args)}
