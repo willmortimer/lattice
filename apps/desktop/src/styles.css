@@ -1606,6 +1606,11 @@ html[data-page-width="full"] {
   font: 11px var(--lt-font-mono);
 }
 
+.canvas-persist-tabs {
+  display: inline-flex;
+  gap: 6px;
+}
+
 .canvas-present-chrome {
   display: flex;
   flex-shrink: 0;

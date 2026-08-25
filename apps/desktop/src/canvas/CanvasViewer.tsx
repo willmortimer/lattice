@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Doc } from "yjs";
+
+import type { PagePersistMode } from "../editor/collab/collabSession";
+import { LATTICE_RESOURCE_MIME, readResourceDragPayload } from "../lib/resourceDrag";
+import { readTextWindow } from "../lib/resourceRuntime";
 import { CanvasOutline } from "./CanvasOutline";
 import {
   CanvasStaleRevisionError,
@@ -13,10 +18,9 @@ import {
   previewUpdateTextNode,
   type CanvasAdapter,
 } from "./adapter";
-import { CanvasParseError, parseCanvas, type CanvasData } from "./types";
+import { canvasDataFromYDoc, observeCanvasYDoc } from "./collab/canvasYDoc";
 import { CanvasScene } from "./scene";
-import { LATTICE_RESOURCE_MIME, readResourceDragPayload } from "../lib/resourceDrag";
-import { readTextWindow } from "../lib/resourceRuntime";
+import { CanvasParseError, parseCanvas, type CanvasData } from "./types";
 import {
   canvasPresentationSidecarPath,
   createCanvasPresentationSession,
@@ -35,6 +39,11 @@ const DEFAULT_NOTE_HEIGHT = 140;
 const PRESENT_CAMERA_MS = 480;
 const SIDECAR_READ_BYTES = 256_000;
 
+const PERSIST_LABELS: Record<PagePersistMode, string> = {
+  plain: "Plain file",
+  collaborative: "Collaborative",
+};
+
 interface CanvasViewerProps {
   json: unknown;
   canvasPath: string;
@@ -45,6 +54,12 @@ interface CanvasViewerProps {
   baseRevision: string;
   onRevisionChange?: (revision: string) => void;
   onError?: (message: string) => void;
+  persistMode?: PagePersistMode;
+  collaborativeAvailable?: boolean;
+  onPersistModeChange?: (mode: PagePersistMode) => void;
+  collabYdoc?: Doc | null;
+  collabLoading?: boolean;
+  collabError?: string | null;
 }
 
 interface ParseResult {
@@ -99,6 +114,12 @@ export function CanvasViewer({
   baseRevision,
   onRevisionChange,
   onError,
+  persistMode = "plain",
+  collaborativeAvailable = false,
+  onPersistModeChange,
+  collabYdoc = null,
+  collabLoading = false,
+  collabError = null,
 }: CanvasViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
@@ -222,6 +243,7 @@ export function CanvasViewer({
   }, [resources, canvasPath, placeQuery]);
 
   useEffect(() => {
+    if (collabYdoc) return;
     fitNextLoadRef.current = true;
     setData(parsed.data);
     setSelectedId(null);
@@ -230,7 +252,17 @@ export function CanvasViewer({
     setTextEdit(null);
     setPresenting(false);
     setSceneIndex(0);
-  }, [parsed.data]);
+  }, [collabYdoc, parsed.data]);
+
+  useEffect(() => {
+    if (!collabYdoc) return;
+    const applyLive = () => {
+      fitNextLoadRef.current = false;
+      setData(canvasDataFromYDoc(collabYdoc));
+    };
+    applyLive();
+    return observeCanvasYDoc(collabYdoc, applyLive);
+  }, [collabYdoc]);
 
   const frameScene = (index: number, animate: boolean) => {
     const scene = scenesRef.current[index];
@@ -747,6 +779,22 @@ export function CanvasViewer({
       <div className="canvas-main">
         {!presenting && (
         <div className="canvas-toolbar" aria-label="Canvas editing actions">
+          {collaborativeAvailable && onPersistModeChange ? (
+            <span className="canvas-persist-tabs" role="radiogroup" aria-label="Canvas persistence mode">
+              {(Object.keys(PERSIST_LABELS) as PagePersistMode[]).map((candidate) => (
+                <button
+                  key={candidate}
+                  type="button"
+                  role="radio"
+                  aria-checked={persistMode === candidate}
+                  className={persistMode === candidate ? "is-active" : undefined}
+                  onClick={() => onPersistModeChange(candidate)}
+                >
+                  {PERSIST_LABELS[candidate]}
+                </button>
+              ))}
+            </span>
+          ) : null}
           <button
             type="button"
             className={placeOpen ? "is-active" : undefined}
@@ -916,6 +964,12 @@ export function CanvasViewer({
               </button>
             </div>
           </div>
+        )}
+        {collabLoading && persistMode === "collaborative" && (
+          <p className="canvas-toolbar-hint" role="status">Opening collaborative canvas…</p>
+        )}
+        {collabError && persistMode === "collaborative" && (
+          <p className="canvas-conflict" role="alert">{collabError}</p>
         )}
         {errorMessage && <p className="canvas-conflict" role="alert">{errorMessage}</p>}
         <div ref={hostRef} className="canvas-viewer" />

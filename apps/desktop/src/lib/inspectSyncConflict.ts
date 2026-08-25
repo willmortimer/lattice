@@ -32,7 +32,7 @@ export function formatSyncConflictResolveError(error: unknown): string {
 }
 
 /**
- * Inspect Collaboration row label — matches PageResourceRenderer availability
+ * Inspect Collaboration row label — matches page/canvas renderer availability
  * (non-synthetic registry ResourceId) and the active persist mode.
  * Returns null when the row should be hidden.
  */
@@ -41,7 +41,7 @@ export function inspectCollaborationLabel(args: {
   hasRegistryResourceId: boolean;
   persistMode?: PagePersistMode;
 }): "Collaborative" | "Plain file" | null {
-  if (args.resourceKind !== "page") return null;
+  if (args.resourceKind !== "page" && args.resourceKind !== "canvas") return null;
   if (!args.hasRegistryResourceId) return null;
   return args.persistMode === "collaborative" ? "Collaborative" : "Plain file";
 }

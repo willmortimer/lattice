@@ -113,8 +113,8 @@ product targets. Required measurement additions:
 - Preview caches.
 - Cancellation and backpressure.
 - Serialized save with paused failure (no retry-spin); collaborative mode uses
-  Yrs journal + Markdown materialization checkpoints — not per-keystroke
-  Markdown writes.
+  Yrs journal + Markdown or JSON Canvas materialization checkpoints — not
+  per-keystroke file writes.
 
 ## Resource suspension
 

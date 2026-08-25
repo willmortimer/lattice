@@ -469,8 +469,8 @@ export function ResourceInspector({
                   <dd>
                     {collaborationLabel}
                     <span className="inspector-id-note">
-                      Collaborative edits use the Yrs journal, not markdown autosave. Toggle in the
-                      page chrome.
+                      Collaborative edits use the Yrs journal, not per-keystroke file writes. Toggle
+                      in the page or canvas toolbar.
                     </span>
                   </dd>
                 </div>

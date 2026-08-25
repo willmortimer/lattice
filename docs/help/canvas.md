@@ -14,3 +14,8 @@ replacement for every note.
 4. Drag items to arrange them. Click an item to open it normally.
 
 Use a canvas when arrangement helps you think. Keep long writing on pages.
+
+Canvases with a resource ID can switch **Plain file** / **Collaborative** in the
+toolbar, same as pages. Collaborative mode journals live node and edge edits,
+then writes the portable `.canvas` JSON on a checkpoint — not on every drag.
+See [Collaborative pages and boards](collaboration.md).

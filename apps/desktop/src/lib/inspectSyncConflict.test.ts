@@ -88,7 +88,7 @@ describe("inspectCollaborationLabel", () => {
     ).toBe("Plain file");
   });
 
-  it("hides the row when not a registry page", () => {
+  it("hides the row when not a registry page or canvas", () => {
     expect(
       inspectCollaborationLabel({
         resourceKind: "page",
@@ -97,9 +97,26 @@ describe("inspectCollaborationLabel", () => {
     ).toBeNull();
     expect(
       inspectCollaborationLabel({
-        resourceKind: "canvas",
+        resourceKind: "dataset",
         hasRegistryResourceId: true,
       }),
     ).toBeNull();
+  });
+
+  it("labels canvases with a registry id like pages", () => {
+    expect(
+      inspectCollaborationLabel({
+        resourceKind: "canvas",
+        hasRegistryResourceId: true,
+        persistMode: "collaborative",
+      }),
+    ).toBe("Collaborative");
+    expect(
+      inspectCollaborationLabel({
+        resourceKind: "canvas",
+        hasRegistryResourceId: true,
+        persistMode: "plain",
+      }),
+    ).toBe("Plain file");
   });
 });

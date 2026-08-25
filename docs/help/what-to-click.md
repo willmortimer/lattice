@@ -32,8 +32,8 @@ open **Inspect** on that item or **Show agent** for help with the workspace.
   do not need to create Personal first. See [Open a workspace](first-workspace.md).
 - **Restore with a workspace open** — **Settings → Cloud account → Encrypted
   workspace backup**, or Inspect for the open workspace.
-- **Shared page editing** — **Plain file** / **Collaborative** on pages with a
-  resource ID (see [Collaborative pages](collaboration.md)).
+- **Shared editing** — **Plain file** / **Collaborative** on pages and canvases
+  with a resource ID (see [Collaborative pages and boards](collaboration.md)).
 - **Screenshot to inbox** — **⌘⇧2** (Screen Clip), then open **Capture Inbox** in Files.
 - **Open a PDF or image from Finder** — right-click → **Open With → Lattice**.
   Lattice is a viewer for those files, not the default app. Markdown stays the
