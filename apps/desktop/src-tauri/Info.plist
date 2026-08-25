@@ -63,6 +63,52 @@
 				<string>tsv</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>PDF Document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>pdf</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Image</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.png</string>
+				<string>public.jpeg</string>
+				<string>public.gif</string>
+				<string>org.webmproject.webp</string>
+				<string>public.avif</string>
+				<string>com.microsoft.bmp</string>
+				<string>public.tiff</string>
+			</array>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>png</string>
+				<string>jpg</string>
+				<string>jpeg</string>
+				<string>gif</string>
+				<string>webp</string>
+				<string>avif</string>
+				<string>bmp</string>
+				<string>tif</string>
+				<string>tiff</string>
+			</array>
+		</dict>
 	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>

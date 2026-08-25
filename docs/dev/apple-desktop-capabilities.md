@@ -19,7 +19,7 @@
 | App Group SecItem tokens (+ legacy migrate) | `lattice-connectors` `MigratingAppGroupTokenStore` |
 | Approval LA + signed audit evidence | `approval_signer.rs` (software ES256; SE backend hook) |
 | Deep links / Open With files | `deep_link.rs` + `RunEvent::Opened` |
-| Finder document types | `Info.plist` + `fileAssociations` |
+| Finder document types | `Info.plist` + `fileAssociations` (Markdown Editor; notebooks Owner; CSV / PDF / images Viewer Alternate) |
 | Spotlight catalog for helpers | `spotlight_index_workspace` → App Group JSON |
 | Quick Look appex sources + scripted build | `apps/desktop/macos/LatticeQuickLook/` + `scripts/macos/build-quicklook-appex.sh` → Markdown/HTML preview (WKWebView); embedded by `assemble-app` / `desktop-install` |
 | SE approval CryptoKit bridge | `crates/lattice-approval-macos` (`libLatticeApprovalBridge.dylib`) wired into `ApprovalSigner` |

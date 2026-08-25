@@ -127,6 +127,29 @@
         "name": "CSV Table",
         "role": "Viewer",
         "mimeType": "text/csv"
+      },
+      {
+        "ext": ["pdf"],
+        "name": "PDF Document",
+        "role": "Viewer",
+        "rank": "Alternate",
+        "mimeType": "application/pdf",
+        "contentTypes": ["com.adobe.pdf"]
+      },
+      {
+        "ext": ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "tif", "tiff"],
+        "name": "Image",
+        "role": "Viewer",
+        "rank": "Alternate",
+        "contentTypes": [
+          "public.png",
+          "public.jpeg",
+          "public.gif",
+          "org.webmproject.webp",
+          "public.avif",
+          "com.microsoft.bmp",
+          "public.tiff"
+        ]
       }
     ]
   },

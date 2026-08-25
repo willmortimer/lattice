@@ -50,6 +50,8 @@ describe("help search filter", () => {
     expect(layoutMatches.some((page) => page.stem === "agent")).toBe(true);
     const clipMatches = filterHelpPages(CORPUS.pages, "clip");
     expect(clipMatches.some((page) => page.stem === "capture")).toBe(true);
+    const openWithMatches = filterHelpPages(CORPUS.pages, "Open With");
+    expect(openWithMatches.some((page) => page.stem === "what-to-click")).toBe(true);
     expect(filterHelpPages(CORPUS.pages, "zzzz-not-in-help")).toHaveLength(0);
   });
 });

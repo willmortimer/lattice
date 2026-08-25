@@ -30,3 +30,5 @@ open **Inspect** on that item or **Show agent** for help with the workspace.
 - **Shared page editing** — **Plain file** / **Collaborative** on pages with a
   resource ID (see [Collaborative pages](collaboration.md)).
 - **Screenshot to inbox** — **⌘⇧2** (Screen Clip), then open **Capture Inbox** in Files.
+- **Open a PDF or image from Finder** — right-click → **Open With → Lattice**.
+  Lattice is a viewer for those files, not the default app.
