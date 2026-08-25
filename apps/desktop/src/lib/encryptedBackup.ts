@@ -25,6 +25,36 @@ export interface EncryptedBackupRestoreResult {
   skipped: EncryptedBackupSkippedEntry[];
 }
 
+export interface EncryptedBackupListEntry {
+  id: string;
+  workspaceId: string;
+  deviceId?: string | null;
+  size: number;
+  contentHash: string;
+  createdAt: number;
+}
+
+const SIGN_IN_PREFIX = "Sign in under Settings → Cloud account";
+
+function backupCreatedAtMs(createdAt: number): number {
+  return createdAt > 1_000_000_000_000 ? createdAt : createdAt * 1000;
+}
+
+function formatBackupSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Picker label: created time, size, and content hash (Inspect + Settings). */
+export function formatEncryptedBackupOption(backup: EncryptedBackupListEntry): string {
+  const created = new Date(backupCreatedAtMs(backup.createdAt)).toLocaleString();
+  const hash =
+    backup.contentHash.length > 12 ? backup.contentHash.slice(0, 12) : backup.contentHash;
+  return `${created} · ${formatBackupSize(backup.size)} · ${hash}`;
+}
+
 export async function getWorkspaceCryptoStatus(): Promise<WorkspaceCryptoStatus> {
   return invoke<WorkspaceCryptoStatus>("workspace_crypto_status_cmd");
 }
@@ -50,11 +80,31 @@ export async function putEncryptedWorkspaceBackup(
   const session = await getCloudSessionStatus();
   if (!session.signedIn) {
     throw new Error(
-      "Sign in under Settings → Cloud account before uploading an encrypted backup.",
+      `${SIGN_IN_PREFIX} before uploading an encrypted backup.`,
     );
   }
   await unlockWorkspaceCrypto(workspaceId);
   return invoke<EncryptedBackupPutResult>("put_encrypted_workspace_backup_cmd", { root });
+}
+
+/**
+ * List encrypted workspace backups for the open workspace. HTTP-only — does not
+ * unlock the DEK.
+ */
+export async function listEncryptedWorkspaceBackups(
+  root: string,
+  workspaceId: string,
+): Promise<EncryptedBackupListEntry[]> {
+  const session = await getCloudSessionStatus();
+  if (!session.signedIn) {
+    throw new Error(
+      `${SIGN_IN_PREFIX} before listing encrypted backups.`,
+    );
+  }
+  if (!workspaceId.trim()) {
+    throw new Error("Open a workspace before listing encrypted backups.");
+  }
+  return invoke<EncryptedBackupListEntry[]>("list_encrypted_workspace_backups_cmd", { root });
 }
 
 /**
@@ -70,7 +120,7 @@ export async function restoreEncryptedWorkspaceBackup(
   const session = await getCloudSessionStatus();
   if (!session.signedIn) {
     throw new Error(
-      "Sign in under Settings → Cloud account before restoring an encrypted backup.",
+      `${SIGN_IN_PREFIX} before restoring an encrypted backup.`,
     );
   }
   await unlockWorkspaceCrypto(workspaceId);

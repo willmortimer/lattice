@@ -1,8 +1,18 @@
 import { Button } from "@lattice/ui";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { inBrowser } from "../demo";
+import {
+  formatEncryptedBackupOption,
+  listEncryptedWorkspaceBackups,
+  putEncryptedWorkspaceBackup,
+  restoreEncryptedWorkspaceBackup,
+  type EncryptedBackupListEntry,
+  type EncryptedBackupPutResult,
+  type EncryptedBackupRestoreResult,
+} from "../lib/encryptedBackup";
 import type { ThemeCatalogPayload } from "../theme";
 import type { AiMode, EmbeddingMode, WorkspaceStartupSettings } from "../lib/profile";
 import type { PageWidth } from "../lib/pageWidth";
@@ -610,7 +620,11 @@ export function SettingsPage({
 
         {/* Keep mounted so SIWA/session state survives nav away/back. */}
         <div hidden={section !== "cloud"}>
-          <CloudAccountSettings />
+          <CloudAccountSettings
+            workspaceRoot={workspace.root || null}
+            workspaceId={workspace.id || null}
+            active={section === "cloud"}
+          />
         </div>
 
         {section === "remote" && (
@@ -940,7 +954,6 @@ export function SettingsPage({
         {section === "features" && (
           <FeaturesSettings
             workspaceRoot={workspace.root || null}
-            workspaceId={workspace.id || null}
             semanticEnabled={settings.search.semanticEnabled}
             onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
             collaborativePageEditor={settings.labs.collaborativePageEditor}
@@ -2062,13 +2075,34 @@ function RemoteAccessSettings({ onOpenCloud }: { onOpenCloud: () => void }) {
   );
 }
 
-function CloudAccountSettings() {
+function CloudAccountSettings({
+  workspaceRoot,
+  workspaceId,
+  active,
+}: {
+  workspaceRoot: string | null;
+  workspaceId: string | null;
+  active: boolean;
+}) {
   const queryClient = useQueryClient();
   const { data: status = null } = useCloudSessionQuery();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [encBackupBusy, setEncBackupBusy] = useState(false);
+  const [encRestoreBusy, setEncRestoreBusy] = useState(false);
+  const [encListBusy, setEncListBusy] = useState(false);
+  const [encBackupError, setEncBackupError] = useState<string | null>(null);
+  const [encRestoreError, setEncRestoreError] = useState<string | null>(null);
+  const [encListError, setEncListError] = useState<string | null>(null);
+  const [encBackupResult, setEncBackupResult] = useState<EncryptedBackupPutResult | null>(null);
+  const [encRestoreResult, setEncRestoreResult] = useState<EncryptedBackupRestoreResult | null>(
+    null,
+  );
+  const [backups, setBackups] = useState<EncryptedBackupListEntry[]>([]);
+  const [selectedBackupId, setSelectedBackupId] = useState("");
+  const [restoreTarget, setRestoreTarget] = useState<string | null>(null);
 
   useEffect(() => {
     if (status?.user?.email) {
@@ -2097,6 +2131,40 @@ function CloudAccountSettings() {
       void unlistenError.then((unlisten) => unlisten());
     };
   }, [queryClient]);
+
+  useEffect(() => {
+    if (inBrowser || !active) return;
+    if (!status?.signedIn || !workspaceRoot || !workspaceId) {
+      setBackups([]);
+      setSelectedBackupId("");
+      setEncListError(null);
+      setEncListBusy(false);
+      return;
+    }
+    let cancelled = false;
+    setEncListBusy(true);
+    setEncListError(null);
+    void listEncryptedWorkspaceBackups(workspaceRoot, workspaceId)
+      .then((list) => {
+        if (cancelled) return;
+        setBackups(list);
+        setSelectedBackupId((prev) =>
+          list.some((entry) => entry.id === prev) ? prev : (list[0]?.id ?? ""),
+        );
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setBackups([]);
+        setSelectedBackupId("");
+        setEncListError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setEncListBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active, status?.signedIn, workspaceRoot, workspaceId]);
 
   async function handleSignIn() {
     if (inBrowser) return;
@@ -2159,6 +2227,75 @@ function CloudAccountSettings() {
       setBusy(false);
     }
   }
+
+  async function handleEncryptedBackup() {
+    if (inBrowser || encBackupBusy) return;
+    if (!workspaceRoot || !workspaceId) {
+      setEncBackupError("Open a workspace before uploading an encrypted backup.");
+      return;
+    }
+    setEncBackupBusy(true);
+    setEncBackupError(null);
+    setEncBackupResult(null);
+    try {
+      const result = await putEncryptedWorkspaceBackup(workspaceRoot, workspaceId);
+      setEncBackupResult(result);
+      setEncListError(null);
+      const list = await listEncryptedWorkspaceBackups(workspaceRoot, workspaceId);
+      setBackups(list);
+      setSelectedBackupId(result.backupId);
+    } catch (err: unknown) {
+      setEncBackupError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEncBackupBusy(false);
+    }
+  }
+
+  async function handleChooseRestoreFolder() {
+    if (inBrowser) return;
+    const path = await open({
+      directory: true,
+      multiple: false,
+      title: "Choose restore destination",
+    });
+    if (typeof path === "string") setRestoreTarget(path);
+  }
+
+  async function handleEncryptedRestore() {
+    if (inBrowser || encRestoreBusy) return;
+    if (!workspaceRoot || !workspaceId) {
+      setEncRestoreError("Open a workspace before restoring an encrypted backup.");
+      return;
+    }
+    const targetRoot = restoreTarget ?? workspaceRoot;
+    if (!targetRoot) {
+      setEncRestoreError("Choose a restore destination folder.");
+      return;
+    }
+    if (!selectedBackupId) {
+      setEncRestoreError("Select a backup to restore.");
+      return;
+    }
+    setEncRestoreBusy(true);
+    setEncRestoreError(null);
+    setEncRestoreResult(null);
+    try {
+      const result = await restoreEncryptedWorkspaceBackup(
+        workspaceRoot,
+        targetRoot,
+        workspaceId,
+        selectedBackupId,
+      );
+      setEncRestoreResult(result);
+    } catch (err: unknown) {
+      setEncRestoreError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEncRestoreBusy(false);
+    }
+  }
+
+  const restoreDestination = restoreTarget ?? workspaceRoot;
+  const encBackupDisabled = encBackupBusy || encRestoreBusy || encListBusy;
 
   const statusText = status
     ? status.signedIn
@@ -2301,6 +2438,115 @@ function CloudAccountSettings() {
             <div className="diagnostics-card" role="alert">
               <strong>Cloud sign-in error</strong>
               <span>{error}</span>
+            </div>
+          ) : null}
+
+          <h2 className="settings-subsection">Encrypted workspace backup</h2>
+          <p className="settings-copy">
+            Encrypt this workspace and store opaque ciphertext in Lattice Cloud. Restore writes
+            into a folder you choose; existing files with different content are skipped. This is
+            separate from per-resource Back up to Lattice Cloud.
+          </p>
+          <SettingRow
+            settingId="cloud.encrypted-backup"
+            title="Encrypted workspace backup"
+            description="Upload a snapshot of the open workspace, pick a previous backup, and restore it into a destination folder."
+          >
+            <div className="cloud-signin-password">
+              <div className="cloud-account-actions">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={encBackupDisabled}
+                  onClick={() => void handleEncryptedBackup()}
+                >
+                  {encBackupBusy ? "Encrypting…" : "Back up workspace"}
+                </Button>
+              </div>
+              <label className="cloud-signin-field">
+                <span>Backup</span>
+                <select
+                  value={selectedBackupId}
+                  disabled={encBackupDisabled || backups.length === 0}
+                  onChange={(event) => setSelectedBackupId(event.currentTarget.value)}
+                >
+                  {backups.length === 0 ? (
+                    <option value="">
+                      {encListBusy ? "Loading backups…" : "No backups yet"}
+                    </option>
+                  ) : (
+                    backups.map((backup) => (
+                      <option key={backup.id} value={backup.id}>
+                        {formatEncryptedBackupOption(backup)}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+              <label className="cloud-signin-field">
+                <span>Restore destination</span>
+                <span className="settings-copy">
+                  {restoreDestination ?? "Choose a folder"}
+                </span>
+              </label>
+              <div className="cloud-account-actions">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={encBackupDisabled}
+                  onClick={() => void handleChooseRestoreFolder()}
+                >
+                  Choose restore folder
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={encBackupDisabled || !selectedBackupId || !restoreDestination}
+                  onClick={() => void handleEncryptedRestore()}
+                >
+                  {encRestoreBusy ? "Restoring…" : "Restore backup"}
+                </Button>
+              </div>
+            </div>
+          </SettingRow>
+          {encBackupResult ? (
+            <div className="diagnostics-card" role="status">
+              <strong>Encrypted backup uploaded</strong>
+              <span>
+                {encBackupResult.backupId} · sha256:{encBackupResult.contentHash} ·{" "}
+                {encBackupResult.ciphertextBytes} bytes ciphertext
+              </span>
+            </div>
+          ) : null}
+          {encRestoreResult ? (
+            <div className="diagnostics-card" role="status">
+              <strong>Encrypted backup restored</strong>
+              <span>
+                {encRestoreResult.backupId} · restored {encRestoreResult.restoredCount}
+                {encRestoreResult.skipped.length > 0
+                  ? ` · skipped ${encRestoreResult.skipped.length}: ${encRestoreResult.skipped
+                      .map((entry) => entry.path)
+                      .join(", ")}`
+                  : ""}
+              </span>
+            </div>
+          ) : null}
+          {encBackupError ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>Encrypted backup error</strong>
+              <span>{encBackupError}</span>
+            </div>
+          ) : null}
+          {encRestoreError ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>Encrypted restore error</strong>
+              <span>{encRestoreError}</span>
+            </div>
+          ) : null}
+          {encListError ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>Encrypted backup list error</strong>
+              <span>{encListError}</span>
             </div>
           ) : null}
         </>

@@ -11,7 +11,10 @@ import {
   type ConflictResolution,
 } from "../lib/cloudSync";
 import {
+  formatEncryptedBackupOption,
+  listEncryptedWorkspaceBackups,
   restoreEncryptedWorkspaceBackup,
+  type EncryptedBackupListEntry,
   type EncryptedBackupRestoreResult,
 } from "../lib/encryptedBackup";
 import {
@@ -137,6 +140,9 @@ export function ResourceInspector({
   const [encRestoreResult, setEncRestoreResult] = useState<EncryptedBackupRestoreResult | null>(
     null,
   );
+  const [encBackups, setEncBackups] = useState<EncryptedBackupListEntry[]>([]);
+  const [encSelectedBackupId, setEncSelectedBackupId] = useState("");
+  const [encListBusy, setEncListBusy] = useState(false);
   const recordAuthorityStat = useDesktopUiStore((state) => state.recordAuthorityStat);
   const syncBadgeByPath = useDesktopUiStore((state) => state.syncBadgeByPath);
   const setSyncBadges = useDesktopUiStore((state) => state.setSyncBadges);
@@ -239,6 +245,37 @@ export function ResourceInspector({
   );
 
   const canRestoreEncryptedBackup = Boolean(root && workspaceId && !inBrowser);
+  const showEncryptedRestorePanel = canRestoreEncryptedBackup && section === "properties";
+
+  useEffect(() => {
+    if (!showEncryptedRestorePanel || !root || !workspaceId) {
+      return;
+    }
+    let cancelled = false;
+    setEncListBusy(true);
+    setEncRestoreError(null);
+    void listEncryptedWorkspaceBackups(root, workspaceId)
+      .then((list) => {
+        if (cancelled) return;
+        setEncBackups(list);
+        setEncSelectedBackupId((prev) =>
+          list.some((entry) => entry.id === prev) ? prev : (list[0]?.id ?? ""),
+        );
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setEncRestoreError(message);
+        setEncBackups([]);
+        setEncSelectedBackupId("");
+      })
+      .finally(() => {
+        if (!cancelled) setEncListBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showEncryptedRestorePanel, root, workspaceId]);
 
   async function handleCloudBackup() {
     if (inBrowser || cloudBusy || !root || !resource) return;
@@ -347,11 +384,20 @@ export function ResourceInspector({
 
   async function handleRestoreEncryptedBackup() {
     if (inBrowser || encRestoreBusy || !root || !workspaceId) return;
+    if (!encSelectedBackupId) {
+      setEncRestoreError("Select a backup to restore.");
+      return;
+    }
     setEncRestoreBusy(true);
     setEncRestoreError(null);
     setEncRestoreResult(null);
     try {
-      const result = await restoreEncryptedWorkspaceBackup(root, root, workspaceId);
+      const result = await restoreEncryptedWorkspaceBackup(
+        root,
+        root,
+        workspaceId,
+        encSelectedBackupId,
+      );
       setEncRestoreResult(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -559,14 +605,34 @@ export function ResourceInspector({
             {canRestoreEncryptedBackup && (
               <div className="inspector-cloud-actions">
                 <p className="inspector-cloud-copy">
-                  Restore the latest encrypted workspace backup into this workspace. Existing
-                  conflicting paths are skipped.
+                  Restore an encrypted workspace backup into this workspace. Existing conflicting
+                  paths are skipped. This is separate from per-resource Back up to Lattice Cloud.
                 </p>
+                <label className="cloud-signin-field">
+                  <span>Backup</span>
+                  <select
+                    value={encSelectedBackupId}
+                    disabled={encRestoreBusy || encListBusy || encBackups.length === 0}
+                    onChange={(event) => setEncSelectedBackupId(event.currentTarget.value)}
+                  >
+                    {encBackups.length === 0 ? (
+                      <option value="">
+                        {encListBusy ? "Loading backups…" : "No backups yet"}
+                      </option>
+                    ) : (
+                      encBackups.map((backup) => (
+                        <option key={backup.id} value={backup.id}>
+                          {formatEncryptedBackupOption(backup)}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
                 <div className="cloud-account-actions">
                   <Button
                     size="sm"
                     variant="secondary"
-                    disabled={encRestoreBusy}
+                    disabled={encRestoreBusy || encListBusy || !encSelectedBackupId}
                     onClick={() => void handleRestoreEncryptedBackup()}
                   >
                     {encRestoreBusy ? "Restoring…" : "Restore encrypted backup"}

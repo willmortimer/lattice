@@ -6676,7 +6676,8 @@ html[data-motion="always"] *::after {
   color: var(--lt-muted);
 }
 
-.cloud-signin-field input {
+.cloud-signin-field input,
+.cloud-signin-field select {
   font: 13px/1.4 var(--lt-font-ui);
 }
 
@@ -6924,6 +6925,16 @@ html[data-motion="always"] *::after {
   color: var(--lt-text-soft);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.inspector-cloud-actions select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--lt-line-strong);
+  border-radius: var(--lt-radius-sm);
+  color: var(--lt-text);
+  background: var(--lt-bg-raise);
+  font: 11.5px var(--lt-font-mono);
 }
 
 .inspector-cloud-status {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { formatEncryptedBackupOption } from "../lib/encryptedBackup";
 import {
   inspectCollaborationLabel,
   shouldShowInspectSyncConflict,
@@ -50,5 +51,17 @@ describe("ResourceInspector conflict / collaboration predicates", () => {
         persistMode: "plain",
       }),
     ).toBe("Plain file");
+  });
+
+  it("encrypted restore picker labels include created time, size, and hash", () => {
+    const label = formatEncryptedBackupOption({
+      id: "bk-1",
+      workspaceId: "ws",
+      size: 4096,
+      contentHash: "deadbeefcafebabe",
+      createdAt: 1_700_000_000,
+    });
+    expect(label).toContain("4.0 KB");
+    expect(label).toContain("deadbeefcafe");
   });
 });

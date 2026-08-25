@@ -173,6 +173,7 @@ const SETTING_SCOPE_OVERRIDES: Record<string, SettingsScope> = {
   "privacy.ai-audit": "ACCOUNT",
   "privacy.telemetry": "ACCOUNT",
   "remote.access": "WORKSPACE",
+  "cloud.encrypted-backup": "WORKSPACE",
 };
 
 export function sectionScope(section: SettingsSection): SettingsScope {
@@ -389,13 +390,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
     keywords: ["labs", "cloud", "blob", "materialize", "authority"],
   },
   {
-    id: "features.labs-encrypted-backup",
-    section: "features",
-    title: "Labs encrypted workspace backup",
-    description: "Encrypt a workspace snapshot with the DEK and PUT opaque bytes to cloud backup storage.",
-    keywords: ["labs", "cloud", "backup", "encrypt", "dek", "ciphertext"],
-  },
-  {
     id: "features.labs-cloud-sync",
     section: "features",
     title: "Labs open-format cloud sync",
@@ -479,6 +473,14 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
     title: "Cloud account",
     description: "Sign in to lattice-server for sync and Lattice paid AI.",
     keywords: ["apple", "password", "sync", "account"],
+  },
+  {
+    id: "cloud.encrypted-backup",
+    section: "cloud",
+    title: "Encrypted workspace backup",
+    description:
+      "Encrypt a workspace snapshot and store opaque bytes in Lattice Cloud, or restore a previous snapshot into a folder you choose.",
+    keywords: ["cloud", "backup", "encrypt", "dek", "ciphertext", "restore"],
   },
   {
     id: "remote.access",

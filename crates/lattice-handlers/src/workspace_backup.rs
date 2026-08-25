@@ -3,7 +3,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use lattice_cloud_client::{default_client, CloudApiClient, CloudHttpClient, HttpCloudClient};
+use lattice_cloud_client::{
+    default_client, BackupMetadataResponse, CloudApiClient, CloudHttpClient, HttpCloudClient,
+};
 use lattice_core::Workspace;
 use lattice_storage::atomic_write_file;
 use lattice_workspace_crypto::{
@@ -38,6 +40,31 @@ pub struct EncryptedBackupRestoreResult {
     pub backup_id: String,
     pub restored_count: u64,
     pub skipped: Vec<EncryptedBackupSkippedEntry>,
+}
+
+/// Backup metadata for the webview. Omits `object_key` so storage paths stay in Rust.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EncryptedBackupListEntry {
+    pub id: String,
+    pub workspace_id: String,
+    pub device_id: Option<String>,
+    pub size: i64,
+    pub content_hash: String,
+    pub created_at: i64,
+}
+
+impl From<BackupMetadataResponse> for EncryptedBackupListEntry {
+    fn from(meta: BackupMetadataResponse) -> Self {
+        Self {
+            id: meta.id,
+            workspace_id: meta.workspace_id,
+            device_id: meta.device_id,
+            size: meta.size,
+            content_hash: meta.content_hash,
+            created_at: meta.created_at,
+        }
+    }
 }
 
 fn map_err(err: impl std::fmt::Display) -> String {
@@ -85,6 +112,36 @@ pub fn put_encrypted_workspace_backup_with_client<C: CloudHttpClient>(
         ciphertext_bytes: ciphertext.len() as u64,
         plaintext_bytes: plaintext.len() as u64,
     })
+}
+
+/// List encrypted workspace backups for the open workspace's cloud row.
+///
+/// HTTP-only: does not unlock the workspace DEK. `object_key` is stripped before
+/// returning to the webview.
+pub fn list_encrypted_workspace_backups(
+    root: &str,
+) -> Result<Vec<EncryptedBackupListEntry>, String> {
+    let bearer = resolve_cloud_bearer_cmd()?;
+    list_encrypted_workspace_backups_with_client(&api_client(), &bearer, root)
+}
+
+pub fn list_encrypted_workspace_backups_with_client<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    bearer: &str,
+    root: &str,
+) -> Result<Vec<EncryptedBackupListEntry>, String> {
+    let workspace = Workspace::open(Path::new(root)).map_err(map_err)?;
+    let manifest = workspace.manifest();
+    let local_id = manifest.id.to_string();
+    let cloud_workspace =
+        ensure_cloud_workspace(client, bearer, &local_id, manifest.title.as_str())?;
+    let list = client
+        .list_workspace_backups(bearer, &cloud_workspace.id)
+        .map_err(map_err)?;
+    Ok(list
+        .into_iter()
+        .map(EncryptedBackupListEntry::from)
+        .collect())
 }
 
 /// Download, decrypt, and restore an encrypted workspace backup into `target_root`.
@@ -154,9 +211,8 @@ fn restore_payload_into_target(
     target_root: &Path,
     payload: &BackupPayload,
 ) -> Result<(u64, Vec<EncryptedBackupSkippedEntry>), String> {
-    fs::create_dir_all(target_root).map_err(|err| {
-        format!("create restore target {}: {err}", target_root.display())
-    })?;
+    fs::create_dir_all(target_root)
+        .map_err(|err| format!("create restore target {}: {err}", target_root.display()))?;
 
     let mut restored_count = 0u64;
     let mut skipped = Vec::new();
@@ -186,9 +242,8 @@ fn apply_restore_file(
 ) -> Result<(), String> {
     let dest = join_restore_path(target_root, rel)?;
     if dest.exists() {
-        let existing = fs::read(&dest).map_err(|err| {
-            format!("read existing {}: {err}", dest.display())
-        })?;
+        let existing =
+            fs::read(&dest).map_err(|err| format!("read existing {}: {err}", dest.display()))?;
         if existing != bytes {
             skipped.push(EncryptedBackupSkippedEntry {
                 path: rel.to_string(),
@@ -198,9 +253,8 @@ fn apply_restore_file(
         }
     }
     if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!("create parent {}: {err}", parent.display())
-        })?;
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create parent {}: {err}", parent.display()))?;
     }
     atomic_write_file(&dest, bytes).map_err(map_err)?;
     *restored_count += 1;
@@ -243,7 +297,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use lattice_cloud_client::{
-        CloudApiClient, CloudHttpBytesResponse, CloudHttpClient, CloudHttpResponse, CloudError,
+        CloudApiClient, CloudError, CloudHttpBytesResponse, CloudHttpClient, CloudHttpResponse,
     };
     use lattice_core::Workspace;
     use lattice_workspace_crypto::{
@@ -321,9 +375,8 @@ mod tests {
                 });
             }
             if method == "PUT" && path.ends_with("/backups") {
-                let body = body.ok_or_else(|| {
-                    CloudError::Http("backup PUT missing body".into())
-                })?;
+                let body =
+                    body.ok_or_else(|| CloudError::Http("backup PUT missing body".into()))?;
                 *self.captured_put.lock().unwrap() = Some(body.to_vec());
                 let hash_hex = ContentHash::from_bytes(body)
                     .map_err(|err| CloudError::Http(err.to_string()))?
@@ -388,7 +441,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         Workspace::init(dir.path(), "EncBackup").unwrap();
         std::fs::write(dir.path().join("Notes.md"), b"secret notes").unwrap();
-        let local_id = Workspace::open(dir.path()).unwrap().manifest().id.to_string();
+        let local_id = Workspace::open(dir.path())
+            .unwrap()
+            .manifest()
+            .id
+            .to_string();
 
         let _ = workspace_crypto_lock();
         workspace_crypto_unlock(local_id.clone()).unwrap();
@@ -419,8 +476,7 @@ mod tests {
         let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
         let root = dir.path().to_string_lossy().into_owned();
         let plaintext = build_workspace_backup_payload(dir.path()).unwrap();
-        let result =
-            put_encrypted_workspace_backup_with_client(&client, "tok", &root).unwrap();
+        let result = put_encrypted_workspace_backup_with_client(&client, "tok", &root).unwrap();
         assert_eq!(result.backup_id, "bk-1");
         assert_eq!(result.plaintext_bytes, plaintext.len() as u64);
 
@@ -428,7 +484,9 @@ mod tests {
         assert!(captured.len() > lattice_workspace_crypto::NONCE_LEN);
 
         let round_trip = with_unlocked_session(&local_id, |session| {
-            session.decrypt_blob(&captured).map_err(|err| err.to_string())
+            session
+                .decrypt_blob(&captured)
+                .map_err(|err| err.to_string())
         })
         .unwrap();
         assert_eq!(round_trip, plaintext);
@@ -441,14 +499,20 @@ mod tests {
         std::fs::write(src.path().join("Notes.md"), b"secret notes").unwrap();
         std::fs::create_dir_all(src.path().join("nested")).unwrap();
         std::fs::write(src.path().join("nested/a.txt"), b"nested-a").unwrap();
-        let local_id = Workspace::open(src.path()).unwrap().manifest().id.to_string();
+        let local_id = Workspace::open(src.path())
+            .unwrap()
+            .manifest()
+            .id
+            .to_string();
 
         let _ = workspace_crypto_lock();
         workspace_crypto_unlock(local_id.clone()).unwrap();
 
         let plaintext = build_workspace_backup_payload(src.path()).unwrap();
         let ciphertext = with_unlocked_session(&local_id, |session| {
-            session.encrypt_blob(&plaintext).map_err(|err| err.to_string())
+            session
+                .encrypt_blob(&plaintext)
+                .map_err(|err| err.to_string())
         })
         .unwrap();
         let hash_hex = ContentHash::from_bytes(&ciphertext)
@@ -503,8 +567,7 @@ mod tests {
         assert!(result
             .skipped
             .iter()
-            .any(|s| s.path == "Notes.md"
-                && s.reason.contains("different content")));
+            .any(|s| s.path == "Notes.md" && s.reason.contains("different content")));
         assert_eq!(
             std::fs::read(target.path().join("Notes.md")).unwrap(),
             b"local different"
@@ -525,14 +588,20 @@ mod tests {
         let src = tempfile::tempdir().unwrap();
         Workspace::init(src.path(), "EncBackup").unwrap();
         std::fs::write(src.path().join("Only.md"), b"only").unwrap();
-        let local_id = Workspace::open(src.path()).unwrap().manifest().id.to_string();
+        let local_id = Workspace::open(src.path())
+            .unwrap()
+            .manifest()
+            .id
+            .to_string();
 
         let _ = workspace_crypto_lock();
         workspace_crypto_unlock(local_id.clone()).unwrap();
 
         let plaintext = build_workspace_backup_payload(src.path()).unwrap();
         let ciphertext = with_unlocked_session(&local_id, |session| {
-            session.encrypt_blob(&plaintext).map_err(|err| err.to_string())
+            session
+                .encrypt_blob(&plaintext)
+                .map_err(|err| err.to_string())
         })
         .unwrap();
         let hash_hex = ContentHash::from_bytes(&ciphertext)
@@ -570,5 +639,90 @@ mod tests {
             b"only"
         );
         assert!(result.skipped.is_empty());
+    }
+
+    #[test]
+    fn list_encrypted_backups_round_trip_strips_object_key() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "EncBackup").unwrap();
+        let local_id = Workspace::open(dir.path())
+            .unwrap()
+            .manifest()
+            .id
+            .to_string();
+
+        let http = FakeHttp::default();
+        seed_workspace_cloud(&http, &local_id);
+        http.insert(
+            "GET",
+            "/v1/workspaces/cloud-ws-1/backups",
+            CloudHttpResponse {
+                status: 200,
+                body: r#"[{"id":"bk-latest","workspace_id":"cloud-ws-1","device_id":"dev-1","object_key":"backups/cloud-ws-1/bk-latest","size":42,"content_hash":"abc123","created_at":99},{"id":"bk-old","workspace_id":"cloud-ws-1","device_id":null,"object_key":"backups/cloud-ws-1/bk-old","size":1,"content_hash":"00","created_at":1}]"#.into(),
+            },
+        );
+
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let list = list_encrypted_workspace_backups_with_client(
+            &client,
+            "tok",
+            &dir.path().to_string_lossy(),
+        )
+        .unwrap();
+
+        assert_eq!(list.len(), 2);
+        assert_eq!(
+            list[0],
+            EncryptedBackupListEntry {
+                id: "bk-latest".into(),
+                workspace_id: "cloud-ws-1".into(),
+                device_id: Some("dev-1".into()),
+                size: 42,
+                content_hash: "abc123".into(),
+                created_at: 99,
+            }
+        );
+        assert_eq!(list[1].id, "bk-old");
+        assert_eq!(list[1].device_id, None);
+
+        let json = serde_json::to_value(&list[0]).unwrap();
+        assert!(json.get("objectKey").is_none());
+        assert!(json.get("object_key").is_none());
+        assert_eq!(json["id"], "bk-latest");
+        assert_eq!(json["workspaceId"], "cloud-ws-1");
+        assert_eq!(json["deviceId"], "dev-1");
+        assert_eq!(json["contentHash"], "abc123");
+        assert_eq!(json["createdAt"], 99);
+    }
+
+    #[test]
+    fn list_encrypted_backups_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "EncBackup").unwrap();
+        let local_id = Workspace::open(dir.path())
+            .unwrap()
+            .manifest()
+            .id
+            .to_string();
+
+        let http = FakeHttp::default();
+        seed_workspace_cloud(&http, &local_id);
+        http.insert(
+            "GET",
+            "/v1/workspaces/cloud-ws-1/backups",
+            CloudHttpResponse {
+                status: 200,
+                body: "[]".into(),
+            },
+        );
+
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let list = list_encrypted_workspace_backups_with_client(
+            &client,
+            "tok",
+            &dir.path().to_string_lossy(),
+        )
+        .unwrap();
+        assert!(list.is_empty());
     }
 }

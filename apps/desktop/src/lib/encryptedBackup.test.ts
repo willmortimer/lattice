@@ -13,6 +13,8 @@ vi.mock("./ipc", () => ({
 }));
 
 import {
+  formatEncryptedBackupOption,
+  listEncryptedWorkspaceBackups,
   putEncryptedWorkspaceBackup,
   restoreEncryptedWorkspaceBackup,
 } from "./encryptedBackup";
@@ -67,5 +69,49 @@ describe("encryptedBackup", () => {
       restoreEncryptedWorkspaceBackup("/ws", "/out", "ws-1"),
     ).rejects.toThrow(/Sign in under Settings/);
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("listEncryptedWorkspaceBackups rejects when not signed in", async () => {
+    getCloudSessionStatus.mockResolvedValue({ signedIn: false });
+    await expect(listEncryptedWorkspaceBackups("/ws", "ws-1")).rejects.toThrow(
+      /Sign in under Settings/,
+    );
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("listEncryptedWorkspaceBackups invokes without unlocking the DEK", async () => {
+    getCloudSessionStatus.mockResolvedValue({ signedIn: true });
+    invoke.mockResolvedValueOnce([
+      {
+        id: "bk-1",
+        workspaceId: "cloud-ws-1",
+        deviceId: null,
+        size: 42,
+        contentHash: "abc123",
+        createdAt: 99,
+      },
+    ]);
+
+    const list = await listEncryptedWorkspaceBackups("/ws", "ws-1");
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("list_encrypted_workspace_backups_cmd", {
+      root: "/ws",
+    });
+    expect(list).toHaveLength(1);
+    expect(list[0]?.id).toBe("bk-1");
+  });
+
+  it("formatEncryptedBackupOption shows created time, size, and hash", () => {
+    const label = formatEncryptedBackupOption({
+      id: "bk-1",
+      workspaceId: "cloud-ws-1",
+      size: 2048,
+      contentHash: "abcdef0123456789ffff",
+      createdAt: 1_700_000_000,
+    });
+    expect(label).toContain("2.0 KB");
+    expect(label).toContain("abcdef012345");
+    expect(label).not.toContain("backups/");
   });
 });
