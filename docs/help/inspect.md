@@ -76,6 +76,23 @@ When local and cloud versions already disagree, Inspect **properties** shows
   to match.
 - **Take cloud** — replace the local file with the cloud copy.
 
+While you are signed in with a workspace open, Lattice checks the cloud in the
+background about every 30 seconds. **Keep local** / **Take cloud** still appear
+only when there is a conflict — nothing is overwritten until you choose.
+
+## Encrypted workspace backup
+
+This is a snapshot of the **whole workspace**, not one file. It is not the same
+as **Back up to Lattice Cloud**.
+
+1. Sign in under **Settings → Cloud account**.
+2. Under **Encrypted workspace backup**, click **Back up workspace** to upload.
+3. Pick a previous backup from the list, choose a destination folder, and
+   restore. Existing files with different content are skipped.
+
+**Inspect → properties** can restore a picked backup into the **open**
+workspace. Use **Settings → Cloud account** when you want a different folder.
+
 ## File conflicts vs cloud
 
 If you edited a page in Lattice and the same file changed on disk outside the

@@ -25,6 +25,8 @@ open **Inspect** on that item or **Show agent** for help with the workspace.
 
 - **Back up a file** — select it, **Inspect → properties → Back up to Lattice Cloud**
   (requires **Settings → Cloud account**).
+- **Restore a workspace** — **Settings → Cloud account → Encrypted workspace backup**
+  (pick a backup and a folder). Inspect restores into the open workspace.
 - **Shared page editing** — **Settings → Features → Labs**, then **Plain file** /
   **Collaborative** on eligible pages (see [Collaborative pages](collaboration.md)).
 - **Screenshot to inbox** — **⌘⇧2** (Screen Clip), then open **Capture Inbox** in Files.
