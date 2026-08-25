@@ -7,6 +7,7 @@ import {
   applyCanvasDataToYDoc,
   canvasDataFromYDoc,
   canvasYDocIsEmpty,
+  observeCanvasYDoc,
   yDocAddEdge,
   yDocAddTextNode,
   yDocMoveNodes,
@@ -167,5 +168,44 @@ describe("canvasYDoc", () => {
     yDocRemoveNodes(ydoc, ["note"]);
     const next = canvasDataFromYDoc(ydoc);
     expect(next.edges.every((edge) => edge.fromNode !== "note" && edge.toNode !== "note")).toBe(true);
+  });
+
+  it("observeCanvasYDoc emits on local edits and remote Yjs updates", () => {
+    const local = new Y.Doc();
+    applyCanvasDataToYDoc(local, {
+      nodes: [
+        { id: "a", type: "text", text: "A", x: 0, y: 0, width: 100, height: 80 },
+        { id: "b", type: "file", file: "B.md", x: 120, y: 0, width: 100, height: 80 },
+      ],
+      edges: [],
+    });
+
+    const snapshots: ReturnType<typeof canvasDataFromYDoc>[] = [];
+    const applyLive = () => {
+      snapshots.push(canvasDataFromYDoc(local));
+    };
+    applyLive();
+    const stop = observeCanvasYDoc(local, applyLive);
+
+    yDocMoveNodes(local, [{ id: "a", x: 40, y: 50 }]);
+    expect(snapshots.at(-1)?.nodes.find((node) => node.id === "a")).toMatchObject({ x: 40, y: 50 });
+
+    const peer = new Y.Doc();
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(local));
+    yDocAddTextNode(peer, {
+      id: "note",
+      text: "Remote sticky",
+      x: 0,
+      y: 120,
+      width: 120,
+      height: 80,
+    });
+    Y.applyUpdate(local, Y.encodeStateAsUpdate(peer));
+    expect(snapshots.at(-1)?.nodes.map((node) => node.id)).toEqual(["a", "b", "note"]);
+    expect(snapshots.at(-1)?.nodes.find((node) => node.id === "note")).toMatchObject({
+      text: "Remote sticky",
+    });
+
+    stop();
   });
 });

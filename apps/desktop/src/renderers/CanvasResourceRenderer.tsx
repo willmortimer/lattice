@@ -3,10 +3,15 @@ import type { Doc } from "yjs";
 
 import { CanvasViewer } from "../canvas/CanvasViewer";
 import {
+  canvasCollaborativeAvailable,
+  canvasEditAdapterKind,
+  resolveCanvasRegistryResourceId,
+  shouldRefuseCanvasCollaborative,
+} from "../canvas/collab/canvasCollabContract";
+import {
   createNativeCanvasFileIO,
   isCanvasMaterializeConflict,
   materializeCollabCanvas,
-  shouldPatchPlainCanvas,
   shouldScheduleCollabCheckpoint,
 } from "../canvas/collab/canvasMaterialize";
 import { createCollabCanvasAdapter } from "../canvas/collab/collabCanvasAdapter";
@@ -23,11 +28,7 @@ import {
   type CollabSessionHandle,
 } from "../editor/collab/collabSession";
 import { createSerializedSaveController } from "../editor/serializedSave";
-import type { CatalogEntry } from "../lib/resourceCatalog";
-import {
-  looksLikeLatticeResourceId,
-  resourceIdForPath,
-} from "../lib/resourceCatalog";
+import { looksLikeLatticeResourceId } from "../lib/resourceCatalog";
 import {
   getResourceStat,
   persistModeFromResourceStat,
@@ -38,17 +39,6 @@ import { useCloudSessionQuery } from "../query/useCloudSessionQuery";
 import type { ResourceRendererProps } from "../resourceRendererRegistry";
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceRendererContext } from "./RendererContext";
-
-function resolveRegistryResourceId(
-  catalog: ReadonlyMap<string, CatalogEntry>,
-  path: string,
-): string | undefined {
-  const catalogId = resourceIdForPath(catalog, path);
-  if (catalogId && looksLikeLatticeResourceId(catalogId)) {
-    return catalogId;
-  }
-  return undefined;
-}
 
 export function CanvasResourceRenderer({
   context,
@@ -87,7 +77,7 @@ function CollaborativeCanvasSurface({
   const { data: cloudSession } = useCloudSessionQuery();
 
   const [registryResourceId, setRegistryResourceId] = useState<string | undefined>(() =>
-    resolveRegistryResourceId(context.catalog, canvasPath),
+    resolveCanvasRegistryResourceId(context.catalog, canvasPath),
   );
   const [persistMode, setPersistMode] = useState<PagePersistMode>("plain");
   const [collabYdoc, setCollabYdoc] = useState<Doc | null>(null);
@@ -103,7 +93,7 @@ function CollaborativeCanvasSurface({
         console.error("Cannot persist canvas mode without a workspace root");
         return;
       }
-      if (mode === "collaborative" && !registryResourceId) {
+      if (shouldRefuseCanvasCollaborative(mode, registryResourceId)) {
         console.error("Cannot enable collaborative mode without a registry resource id");
         return;
       }
@@ -123,7 +113,7 @@ function CollaborativeCanvasSurface({
   );
 
   useEffect(() => {
-    const fromCatalog = resolveRegistryResourceId(context.catalog, canvasPath);
+    const fromCatalog = resolveCanvasRegistryResourceId(context.catalog, canvasPath);
     if (fromCatalog) {
       setRegistryResourceId(fromCatalog);
     }
@@ -152,8 +142,7 @@ function CollaborativeCanvasSurface({
     };
   }, [canvasPath, context.catalog, context.workspaceRoot]);
 
-  const collaborativeAvailable =
-    registryResourceId !== undefined && looksLikeLatticeResourceId(registryResourceId);
+  const collaborativeAvailable = canvasCollaborativeAvailable(registryResourceId);
   const remoteProviderEnabled = collaborativeAvailable && cloudSession?.signedIn === true;
 
   useEffect(() => {
@@ -209,7 +198,7 @@ function CollaborativeCanvasSurface({
       setCollabError(null);
       return;
     }
-    if (!context.workspaceRoot || !registryResourceId) {
+    if (!context.workspaceRoot || !canvasCollaborativeAvailable(registryResourceId)) {
       setCollabError("Collaborative mode requires a registry resource id.");
       return;
     }
@@ -297,7 +286,7 @@ function CollaborativeCanvasSurface({
     });
   }, [canvasPath, collabYdoc, markCollabDirty]);
 
-  const adapter = shouldPatchPlainCanvas(persistMode) ? nativeAdapter : collabAdapter;
+  const adapter = canvasEditAdapterKind(persistMode) === "native" ? nativeAdapter : collabAdapter;
   const viewerKey = `${canvasPath}#${context.reloadToken}#${persistMode}#${registryResourceId ?? "path"}`;
 
   return (
