@@ -184,6 +184,7 @@ export class CloudSyncLoop {
   private readonly onSnapshot: CloudSyncLoopOptions["onSnapshot"];
   private readonly onSyncBadges: CloudSyncLoopOptions["onSyncBadges"];
   private lastSyncedAt: string | null = null;
+  private signedIn = false;
 
   constructor(options: CloudSyncLoopOptions) {
     this.workspaceRoot = options.workspaceRoot;
@@ -198,6 +199,7 @@ export class CloudSyncLoop {
     void this.unlistenSession?.();
     void this.saveUnsubscribe?.();
     void listen<CloudSessionStatus>("cloud-session-changed", (event) => {
+      this.signedIn = event.payload.signedIn;
       if (event.payload.signedIn) {
         this.startPolling();
         this.scheduleSync("reconnect");
@@ -218,6 +220,7 @@ export class CloudSyncLoop {
     void getCloudSessionStatus()
       .then((session) => {
         if (this.disposed || !session.signedIn) return;
+        this.signedIn = true;
         this.startPolling();
       })
       .catch(() => {
@@ -253,6 +256,11 @@ export class CloudSyncLoop {
     if (rootChanged) {
       this.onSnapshot(IDLE_SNAPSHOT);
       this.onSyncBadges({});
+      this.stopPolling();
+      if (this.signedIn && this.workspaceRoot) {
+        this.startPolling();
+        this.scheduleSync("reconnect");
+      }
     }
   }
 

@@ -216,4 +216,23 @@ describe("CloudSyncLoop poll", () => {
     expect(pushPullCalls()).toHaveLength(0);
     loop.dispose();
   });
+
+  it("starts polling after a workspace root is attached while signed in", async () => {
+    getCloudSessionStatus.mockResolvedValue({ signedIn: true, cloudUrl: "" });
+    const loop = new CloudSyncLoop({
+      workspaceRoot: null,
+      catalog: new Map(),
+      onSnapshot: vi.fn(),
+      onSyncBadges: vi.fn(),
+    });
+    loop.start();
+    sessionListener?.({ payload: { signedIn: true, cloudUrl: "" } });
+    await flushMicrotasks();
+
+    loop.updateContext("/ws", new Map());
+    await vi.advanceTimersByTimeAsync(WORKSPACE_CLOUD_SYNC_DEBOUNCE_MS);
+    await flushMicrotasks();
+    expect(pushPullCalls()).toEqual([["push_pull_workspace_sync_cmd", { root: "/ws" }]]);
+    loop.dispose();
+  });
 });
