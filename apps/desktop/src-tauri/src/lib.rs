@@ -32,6 +32,7 @@ mod gitlab;
 mod kernel;
 mod link_repair;
 mod notification_actions;
+mod open_file;
 mod presence;
 mod profile;
 mod proposals;
@@ -434,14 +435,15 @@ pub fn run() {
             if let tauri::RunEvent::Opened { urls } = event {
                 for url in urls {
                     if let Ok(path) = url.to_file_path() {
-                        if let Some(payload) = open_payload_for_file(&path) {
-                            let _ = app.emit("open-resource", &payload);
-                            if let Some(main) = app.get_webview_window("main") {
-                                let _ = main.unminimize();
-                                let _ = main.show();
-                                let _ = main.set_focus();
+                        match open_file::open_payload_for_file(&path) {
+                            open_file::OpenFileAction::Resource(payload) => {
+                                let _ = app.emit("open-resource", &payload);
+                            }
+                            open_file::OpenFileAction::Unregistered(payload) => {
+                                let _ = app.emit("open-unregistered", &payload);
                             }
                         }
+                        show_and_focus_main(app);
                     }
                 }
             }
@@ -499,21 +501,4 @@ fn show_and_focus_main(app: &AppHandle) {
         let _ = main.show();
         let _ = main.set_focus();
     }
-}
-
-fn open_payload_for_file(path: &std::path::Path) -> Option<deep_link::OpenResourcePayload> {
-    let file = path.canonicalize().ok()?;
-    let mut root = None;
-    for ancestor in file.ancestors() {
-        if ancestor.join(".lattice").is_dir() {
-            root = Some(ancestor.to_path_buf());
-            break;
-        }
-    }
-    let root = root?;
-    let relative = file.strip_prefix(&root).ok()?;
-    Some(deep_link::OpenResourcePayload {
-        root: root.display().to_string(),
-        path: relative.to_string_lossy().replace('\\', "/"),
-    })
 }

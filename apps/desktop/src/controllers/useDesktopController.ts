@@ -836,12 +836,19 @@ export function useDesktopController() {
     let unlisten: (() => void) | undefined;
     void listen<{ root: string; path: string }>("open-resource", (event) => {
       const open = async () => {
+        const root = event.payload.root;
+        const relativePath = event.payload.path;
+        if (!relativePath) {
+          const current = await invoke<WorkspaceSnapshot>("open_workspace", { path: root });
+          await adoptWorkspace(current);
+          return;
+        }
         let current = snapshotRef.current;
-        if (!current || current.root !== event.payload.root) {
-          current = await invoke<WorkspaceSnapshot>("open_workspace", { path: event.payload.root });
+        if (!current || current.root !== root) {
+          current = await invoke<WorkspaceSnapshot>("open_workspace", { path: root });
           await adoptWorkspace(current);
         }
-        const resource = current.resources.find((entry) => entry.path === event.payload.path);
+        const resource = current.resources.find((entry) => entry.path === relativePath);
         if (resource) await handleSelect(resource);
       };
       void open().catch((err) => setError(String(err)));
@@ -851,6 +858,21 @@ export function useDesktopController() {
     return () => unlisten?.();
     // Listener uses refs / event payload and should only be installed once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!hasTauri) return;
+    let unlisten: (() => void) | undefined;
+    void listen<{ path: string }>("open-unregistered", (event) => {
+      const path = event.payload.path;
+      console.warn("Opened path is not a Lattice workspace:", path);
+      offerUnregisteredWorkspace(path);
+      setStatusToast(`Not a Lattice workspace: ${path}`);
+      window.setTimeout(() => setStatusToast(null), 3200);
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => unlisten?.();
   }, []);
 
   useEffect(() => {
@@ -1271,3 +1293,7 @@ export function useDesktopController() {
     setAppLock,
   };
 }
+
+/** Stub: Add-folder / create workspace UI lands in a follow-up. */
+function offerUnregisteredWorkspace(_path: string) {}
+

@@ -2,7 +2,8 @@
 //!
 //! Connector OAuth stays on `lattice://oauth/…` (not cloud). Cloud account
 //! browser SIWA returns on `lattice://oauth/cloud/callback`. Workspace open
-//! links use `lattice://open?root=…&path=…`. Settings use `lattice://settings/…`.
+//! links use `lattice://open?root=…&path=…` (`path` may be empty to open the
+//! workspace root). Settings use `lattice://settings/…`.
 
 use serde::Serialize;
 
@@ -22,6 +23,14 @@ pub struct OpenSettingsPayload {
 #[serde(rename_all = "camelCase")]
 pub struct OpenResourcePayload {
     pub root: String,
+    /// Empty means open the workspace root without selecting a resource.
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenUnregisteredPayload {
+    /// Absolute path the OS asked Lattice to open, outside a workspace.
     pub path: String,
 }
 
@@ -118,7 +127,11 @@ fn parse_lattice_settings(url: &str) -> Option<String> {
     }
     let path = parsed.path().trim_start_matches('/');
     if path == "settings" || path.starts_with("settings/") {
-        return Some(path.trim_start_matches("settings/").trim_matches('/').to_string());
+        return Some(
+            path.trim_start_matches("settings/")
+                .trim_matches('/')
+                .to_string(),
+        );
     }
     None
 }
@@ -131,7 +144,11 @@ fn parse_lattice_help(url: &str) -> Option<String> {
     let host = parsed.host_str().unwrap_or("");
     if host == "help" {
         let stem = path_from_segments(&parsed);
-        return Some(if stem.is_empty() { "welcome".into() } else { stem });
+        return Some(if stem.is_empty() {
+            "welcome".into()
+        } else {
+            stem
+        });
     }
     let path = parsed.path().trim_start_matches('/');
     if path == "help" {
@@ -139,7 +156,11 @@ fn parse_lattice_help(url: &str) -> Option<String> {
     }
     if path.starts_with("help/") {
         let stem = path.trim_start_matches("help/").trim_matches('/');
-        return Some(if stem.is_empty() { "welcome".into() } else { stem.to_string() });
+        return Some(if stem.is_empty() {
+            "welcome".into()
+        } else {
+            stem.to_string()
+        });
     }
     None
 }
@@ -161,9 +182,6 @@ fn parse_lattice_open(parsed: &url::Url) -> Option<OpenResourcePayload> {
     }
     if host == "resource" {
         let path = path_from_segments(parsed);
-        if path.is_empty() {
-            return None;
-        }
         let root = query_value(parsed, "root")?;
         return Some(OpenResourcePayload { root, path });
     }
@@ -186,21 +204,22 @@ fn parse_https_open(parsed: &url::Url) -> Option<OpenResourcePayload> {
 
 fn query_open_payload(parsed: &url::Url) -> Option<OpenResourcePayload> {
     let root = query_value(parsed, "root")?;
-    let path = query_value(parsed, "path")?;
+    let path = query_value_or_empty(parsed, "path");
     Some(OpenResourcePayload { root, path })
 }
 
 fn query_value(parsed: &url::Url, key: &str) -> Option<String> {
+    let value = query_value_or_empty(parsed, key);
+    if value.is_empty() { None } else { Some(value) }
+}
+
+fn query_value_or_empty(parsed: &url::Url, key: &str) -> String {
     for (k, v) in parsed.query_pairs() {
         if k == key {
-            let value = v.trim();
-            if value.is_empty() {
-                return None;
-            }
-            return Some(value.to_string());
+            return v.trim().to_string();
         }
     }
-    None
+    String::new()
 }
 
 fn path_from_segments(parsed: &url::Url) -> String {
@@ -260,20 +279,24 @@ mod tests {
         let url = "lattice://oauth/cloud/callback?code=ldh_abc&state=desk1";
         assert_eq!(
             classify_deep_link(url),
-            Some(DeepLinkAction::CloudAuthCallback(CloudAuthCallbackPayload {
-                code: Some("ldh_abc".into()),
-                state: Some("desk1".into()),
-                error: None,
-            }))
+            Some(DeepLinkAction::CloudAuthCallback(
+                CloudAuthCallbackPayload {
+                    code: Some("ldh_abc".into()),
+                    state: Some("desk1".into()),
+                    error: None,
+                }
+            ))
         );
         let err = "lattice://oauth/cloud/callback?state=desk1&error=nope";
         assert_eq!(
             classify_deep_link(err),
-            Some(DeepLinkAction::CloudAuthCallback(CloudAuthCallbackPayload {
-                code: None,
-                state: Some("desk1".into()),
-                error: Some("nope".into()),
-            }))
+            Some(DeepLinkAction::CloudAuthCallback(
+                CloudAuthCallbackPayload {
+                    code: None,
+                    state: Some("desk1".into()),
+                    error: Some("nope".into()),
+                }
+            ))
         );
     }
 
@@ -285,6 +308,26 @@ mod tests {
             Some(DeepLinkAction::OpenResource(OpenResourcePayload {
                 root: "/Users/me/ws".into(),
                 path: "Notes/Hello.md".into(),
+            }))
+        );
+    }
+
+    #[test]
+    fn classifies_lattice_open_empty_path_as_workspace_root() {
+        let missing_path = "lattice://open?root=/Users/me/ws";
+        assert_eq!(
+            classify_deep_link(missing_path),
+            Some(DeepLinkAction::OpenResource(OpenResourcePayload {
+                root: "/Users/me/ws".into(),
+                path: "".into(),
+            }))
+        );
+        let empty_path = "lattice://open?root=/Users/me/ws&path=";
+        assert_eq!(
+            classify_deep_link(empty_path),
+            Some(DeepLinkAction::OpenResource(OpenResourcePayload {
+                root: "/Users/me/ws".into(),
+                path: "".into(),
             }))
         );
     }
