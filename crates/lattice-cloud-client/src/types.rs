@@ -87,6 +87,12 @@ pub struct CloudWorkspaceRecord {
     pub created_at: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct BackupWrapKeyResponse {
+    /// Account wrap key as 64 hex characters (32 bytes). Never log this value.
+    pub wrap_key: String,
+}
+
 /// Opaque backup metadata returned by `PUT/GET /v1/workspaces/{id}/backups`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct BackupMetadataResponse {

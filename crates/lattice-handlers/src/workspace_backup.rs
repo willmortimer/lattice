@@ -6,16 +6,17 @@ use std::path::{Path, PathBuf};
 use lattice_cloud_client::{
     default_client, BackupMetadataResponse, CloudApiClient, CloudHttpClient, HttpCloudClient,
 };
-use lattice_core::Workspace;
+use lattice_core::{Workspace, WorkspaceManifest};
 use lattice_storage::atomic_write_file;
 use lattice_workspace_crypto::{
-    build_workspace_backup_payload, parse_workspace_backup_payload, BackupPayload,
+    build_workspace_backup_payload, decrypt_blob, is_backup_envelope, open_backup_envelope,
+    parse_workspace_backup_payload, seal_backup_envelope, BackupPayload, Dek,
 };
 use serde::Serialize;
 
 use crate::cloud::resolve_cloud_bearer_cmd;
 use crate::path::validate_workspace_relative;
-use crate::workspace_crypto::with_unlocked_session;
+use crate::workspace_crypto::{with_unlocked_session, workspace_crypto_import_dek};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -95,21 +96,24 @@ pub fn put_encrypted_workspace_backup_with_client<C: CloudHttpClient>(
     let workspace_root = workspace.root();
 
     let plaintext = build_workspace_backup_payload(workspace_root).map_err(map_err)?;
-    let ciphertext = with_unlocked_session(&local_id, |session| {
-        session.encrypt_blob(&plaintext).map_err(map_err)
+    let wrap_key = fetch_account_wrap_key(client, bearer)?;
+    let envelope = with_unlocked_session(&local_id, |session| {
+        let ciphertext = session.encrypt_blob(&plaintext).map_err(map_err)?;
+        let wrapped_dek = session.wrap_unlocked_dek(&wrap_key).map_err(map_err)?;
+        seal_backup_envelope(&wrapped_dek, &ciphertext).map_err(map_err)
     })?;
 
     let cloud_workspace =
         ensure_cloud_workspace(client, bearer, &local_id, manifest.title.as_str())?;
     let metadata = client
-        .put_workspace_backup(bearer, &cloud_workspace.id, &ciphertext, None)
+        .put_workspace_backup(bearer, &cloud_workspace.id, &envelope, None)
         .map_err(map_err)?;
 
     Ok(EncryptedBackupPutResult {
         backup_id: metadata.id,
         cloud_workspace_id: metadata.workspace_id,
         content_hash: metadata.content_hash,
-        ciphertext_bytes: ciphertext.len() as u64,
+        ciphertext_bytes: envelope.len() as u64,
         plaintext_bytes: plaintext.len() as u64,
     })
 }
@@ -194,10 +198,7 @@ pub fn restore_encrypted_workspace_backup_with_client<C: CloudHttpClient>(
     let ciphertext = client
         .get_workspace_backup(bearer, &cloud_workspace.id, &resolved_backup_id)
         .map_err(map_err)?;
-    let plaintext = with_unlocked_session(&local_id, |session| {
-        session.decrypt_blob(&ciphertext).map_err(map_err)
-    })?;
-    let payload = parse_workspace_backup_payload(&plaintext).map_err(map_err)?;
+    let payload = decrypt_restore_payload(client, bearer, &local_id, &ciphertext)?;
 
     let restore = restore_payload_into_target(Path::new(target_root), &payload)?;
     Ok(EncryptedBackupRestoreResult {
@@ -291,6 +292,47 @@ pub fn ensure_cloud_workspace<C: CloudHttpClient>(
         .map_err(map_err)
 }
 
+fn fetch_account_wrap_key<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    bearer: &str,
+) -> Result<Dek, String> {
+    let response = client.get_backup_wrap_key(bearer).map_err(map_err)?;
+    let bytes = hex::decode(response.wrap_key.trim())
+        .map_err(|err| format!("invalid backup wrap key encoding: {err}"))?;
+    Dek::try_from_slice(&bytes).map_err(map_err)
+}
+
+fn decrypt_restore_payload<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    bearer: &str,
+    local_id: &str,
+    body: &[u8],
+) -> Result<BackupPayload, String> {
+    if is_backup_envelope(body) {
+        let wrap_key = fetch_account_wrap_key(client, bearer)?;
+        let (dek, inner) = open_backup_envelope(&wrap_key, body).map_err(|err| {
+            format!("failed to unwrap backup DEK (will not provision a new key): {err}")
+        })?;
+        let plaintext = decrypt_blob(&dek, &inner).map_err(map_err)?;
+        let payload = parse_workspace_backup_payload(&plaintext).map_err(map_err)?;
+        let payload_workspace_id = workspace_id_from_manifest(&payload.manifest)?;
+        workspace_crypto_import_dek(&payload_workspace_id, dek)?;
+        Ok(payload)
+    } else {
+        let plaintext = with_unlocked_session(local_id, |session| {
+            session.decrypt_blob(body).map_err(map_err)
+        })?;
+        parse_workspace_backup_payload(&plaintext).map_err(map_err)
+    }
+}
+
+fn workspace_id_from_manifest(bytes: &[u8]) -> Result<String, String> {
+    let text =
+        std::str::from_utf8(bytes).map_err(|err| format!("backup manifest is not UTF-8: {err}"))?;
+    let manifest = WorkspaceManifest::parse(Path::new("lattice.yaml"), text).map_err(map_err)?;
+    Ok(manifest.id.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -301,15 +343,20 @@ mod tests {
     };
     use lattice_core::Workspace;
     use lattice_workspace_crypto::{
-        build_workspace_backup_payload, parse_workspace_backup_payload, MemoryKeystore,
-        WorkspaceCryptoSession,
+        build_workspace_backup_payload, decrypt_blob, is_backup_envelope, open_backup_envelope,
+        parse_workspace_backup_payload, Dek, MemoryKeystore, WorkspaceCryptoSession,
+        ENVELOPE_MAGIC,
     };
     use latticefs_core::ContentHash;
 
     use super::*;
     use crate::workspace_crypto::{
-        with_unlocked_session, workspace_crypto_lock, workspace_crypto_unlock,
+        with_unlocked_session, workspace_crypto_destroy, workspace_crypto_lock,
+        workspace_crypto_unlock,
     };
+
+    const TEST_WRAP_KEY_HEX: &str =
+        "4242424242424242424242424242424242424242424242424242424242424242";
 
     #[derive(Default, Clone)]
     struct FakeHttp {
@@ -420,6 +467,21 @@ mod tests {
         );
     }
 
+    fn seed_wrap_key(http: &FakeHttp) {
+        http.insert(
+            "GET",
+            "/v1/me/backup-wrap-key",
+            CloudHttpResponse {
+                status: 200,
+                body: format!(r#"{{"wrap_key":"{TEST_WRAP_KEY_HEX}"}}"#),
+            },
+        );
+    }
+
+    fn test_wrap_key() -> Dek {
+        Dek::try_from_slice(&hex::decode(TEST_WRAP_KEY_HEX).unwrap()).unwrap()
+    }
+
     #[test]
     fn payload_encrypt_decrypt_round_trip() {
         let dir = tempfile::tempdir().unwrap();
@@ -472,6 +534,7 @@ mod tests {
                 ),
             },
         );
+        seed_wrap_key(&http);
 
         let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
         let root = dir.path().to_string_lossy().into_owned();
@@ -481,15 +544,17 @@ mod tests {
         assert_eq!(result.plaintext_bytes, plaintext.len() as u64);
 
         let captured = http.captured_put.lock().unwrap().clone().expect("PUT body");
-        assert!(captured.len() > lattice_workspace_crypto::NONCE_LEN);
+        assert!(captured.starts_with(ENVELOPE_MAGIC));
+        assert!(is_backup_envelope(&captured));
 
-        let round_trip = with_unlocked_session(&local_id, |session| {
-            session
-                .decrypt_blob(&captured)
-                .map_err(|err| err.to_string())
+        let (dek, inner) = open_backup_envelope(&test_wrap_key(), &captured).unwrap();
+        let round_trip = decrypt_blob(&dek, &inner).unwrap();
+        assert_eq!(round_trip, plaintext);
+        let session_round_trip = with_unlocked_session(&local_id, |session| {
+            session.decrypt_blob(&inner).map_err(|err| err.to_string())
         })
         .unwrap();
-        assert_eq!(round_trip, plaintext);
+        assert_eq!(session_round_trip, plaintext);
     }
 
     #[test]
@@ -693,6 +758,139 @@ mod tests {
         assert_eq!(json["deviceId"], "dev-1");
         assert_eq!(json["contentHash"], "abc123");
         assert_eq!(json["createdAt"], 99);
+    }
+
+    #[test]
+    fn restore_envelope_with_empty_keystore() {
+        let src = tempfile::tempdir().unwrap();
+        Workspace::init(src.path(), "EncBackup").unwrap();
+        std::fs::write(src.path().join("Notes.md"), b"secret notes").unwrap();
+        let local_id = Workspace::open(src.path())
+            .unwrap()
+            .manifest()
+            .id
+            .to_string();
+
+        let _ = workspace_crypto_lock();
+        workspace_crypto_unlock(local_id.clone()).unwrap();
+
+        let http = FakeHttp {
+            captured_put: Arc::new(Mutex::new(None)),
+            ..Default::default()
+        };
+        seed_workspace_cloud(&http, &local_id);
+        seed_wrap_key(&http);
+
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let root = src.path().to_string_lossy().into_owned();
+        let put = put_encrypted_workspace_backup_with_client(&client, "tok", &root).unwrap();
+        let envelope = http.captured_put.lock().unwrap().clone().expect("PUT body");
+        assert!(is_backup_envelope(&envelope));
+
+        workspace_crypto_destroy(&local_id).unwrap();
+        let _ = workspace_crypto_lock();
+        assert!(!crate::workspace_crypto::workspace_crypto_status().unlocked);
+
+        let hash_hex = ContentHash::from_bytes(&envelope)
+            .unwrap()
+            .as_str()
+            .strip_prefix("sha256:")
+            .unwrap()
+            .to_string();
+        http.insert_bytes(
+            "GET",
+            "/v1/workspaces/cloud-ws-1/backups/bk-1",
+            CloudHttpBytesResponse {
+                status: 200,
+                body: envelope,
+                content_hash: Some(hash_hex),
+            },
+        );
+
+        let target = tempfile::tempdir().unwrap();
+        let result = restore_encrypted_workspace_backup_with_client(
+            &client,
+            "tok",
+            &root,
+            &target.path().to_string_lossy(),
+            Some("bk-1"),
+        )
+        .unwrap();
+        assert_eq!(result.backup_id, put.backup_id);
+        assert_eq!(
+            std::fs::read(target.path().join("Notes.md")).unwrap(),
+            b"secret notes"
+        );
+        assert!(crate::workspace_crypto::workspace_crypto_status().unlocked);
+        assert_eq!(
+            crate::workspace_crypto::workspace_crypto_status()
+                .workspace_id
+                .as_deref(),
+            Some(local_id.as_str())
+        );
+    }
+
+    #[test]
+    fn restore_envelope_unwrap_failure_does_not_provision() {
+        let src = tempfile::tempdir().unwrap();
+        Workspace::init(src.path(), "EncBackup").unwrap();
+        std::fs::write(src.path().join("Notes.md"), b"secret notes").unwrap();
+        let local_id = Workspace::open(src.path())
+            .unwrap()
+            .manifest()
+            .id
+            .to_string();
+
+        let _ = workspace_crypto_lock();
+        workspace_crypto_unlock(local_id.clone()).unwrap();
+
+        let http = FakeHttp {
+            captured_put: Arc::new(Mutex::new(None)),
+            ..Default::default()
+        };
+        seed_workspace_cloud(&http, &local_id);
+        seed_wrap_key(&http);
+        let client = CloudApiClient::with_base_url(http.clone(), "https://cloud.test");
+        let root = src.path().to_string_lossy().into_owned();
+        put_encrypted_workspace_backup_with_client(&client, "tok", &root).unwrap();
+        let envelope = http.captured_put.lock().unwrap().clone().expect("PUT body");
+
+        workspace_crypto_destroy(&local_id).unwrap();
+        let _ = workspace_crypto_lock();
+
+        http.insert(
+            "GET",
+            "/v1/me/backup-wrap-key",
+            CloudHttpResponse {
+                status: 200,
+                body: r#"{"wrap_key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#.into(),
+            },
+        );
+        http.insert_bytes(
+            "GET",
+            "/v1/workspaces/cloud-ws-1/backups/bk-1",
+            CloudHttpBytesResponse {
+                status: 200,
+                body: envelope,
+                content_hash: None,
+            },
+        );
+
+        let target = tempfile::tempdir().unwrap();
+        let err = restore_encrypted_workspace_backup_with_client(
+            &client,
+            "tok",
+            &root,
+            &target.path().to_string_lossy(),
+            Some("bk-1"),
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("failed to unwrap backup DEK"),
+            "unexpected error: {err}"
+        );
+        assert!(!crate::workspace_crypto::workspace_crypto_status().unlocked);
+        assert!(!target.path().join("Notes.md").exists());
     }
 
     #[test]

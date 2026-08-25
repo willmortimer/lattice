@@ -10,6 +10,7 @@
 //! crate to `presence.rs`, `app_lock.rs`, or capture/**.
 
 mod aead;
+mod backup_envelope;
 mod backup_payload;
 mod dek;
 mod error;
@@ -17,14 +18,18 @@ mod keystore;
 mod session;
 
 pub use aead::{decrypt_blob, encrypt_blob, NONCE_LEN};
+pub use backup_envelope::{
+    is_backup_envelope, open_backup_envelope, parse_backup_envelope, seal_backup_envelope,
+    unwrap_dek, wrap_dek, BackupEnvelope, ENVELOPE_MAGIC, ENVELOPE_VERSION,
+};
 pub use backup_payload::{
     build_workspace_backup_payload, parse_workspace_backup_payload, BackupPayload,
 };
 pub use dek::{generate_dek, Dek, DEK_LEN};
 pub use error::{Error, Result};
-pub use keystore::{dek_account_for, Keystore, MemoryKeystore, WORKSPACE_DEK_SERVICE};
 #[cfg(feature = "keychain")]
 pub use keystore::KeychainKeystore;
+pub use keystore::{dek_account_for, Keystore, MemoryKeystore, WORKSPACE_DEK_SERVICE};
 pub use session::WorkspaceCryptoSession;
 
 #[cfg(test)]
@@ -52,10 +57,7 @@ mod tests {
 
         session.lock();
         assert!(!session.is_unlocked());
-        assert!(matches!(
-            session.encrypt_blob(b"nope"),
-            Err(Error::Locked)
-        ));
+        assert!(matches!(session.encrypt_blob(b"nope"), Err(Error::Locked)));
 
         session.unlock("ws-1").expect("unlock");
         assert!(session.is_unlocked());
@@ -82,6 +84,19 @@ mod tests {
     }
 
     #[test]
+    fn import_dek_unlocks_without_provision() {
+        let store = MemoryKeystore::new();
+        let mut session = WorkspaceCryptoSession::new(store);
+        let dek = generate_dek();
+        let blob = encrypt_blob(&dek, b"imported").unwrap();
+        session.import_dek("ws-import", dek).unwrap();
+        assert_eq!(session.decrypt_blob(&blob).unwrap(), b"imported");
+        session.lock();
+        session.unlock("ws-import").unwrap();
+        assert_eq!(session.decrypt_blob(&blob).unwrap(), b"imported");
+    }
+
+    #[test]
     fn unlock_missing_dek_errors() {
         let store = MemoryKeystore::new();
         let mut session = WorkspaceCryptoSession::new(store);
@@ -98,10 +113,7 @@ mod tests {
         session.provision("ws-x").unwrap();
         session.destroy("ws-x").unwrap();
         assert!(!session.is_unlocked());
-        assert!(matches!(
-            session.unlock("ws-x"),
-            Err(Error::MissingDek(_))
-        ));
+        assert!(matches!(session.unlock("ws-x"), Err(Error::MissingDek(_))));
     }
 
     #[test]

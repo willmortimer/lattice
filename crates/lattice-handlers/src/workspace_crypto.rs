@@ -2,11 +2,9 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use lattice_workspace_crypto::{
-    MemoryKeystore, WorkspaceCryptoSession,
-};
 #[cfg(feature = "keychain")]
 use lattice_workspace_crypto::KeychainKeystore;
+use lattice_workspace_crypto::{Dek, MemoryKeystore, WorkspaceCryptoSession};
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -27,9 +25,7 @@ type ActiveKeystore = MemoryKeystore;
 
 fn crypto_session() -> &'static Mutex<WorkspaceCryptoSession<ActiveKeystore>> {
     static SESSION: OnceLock<Mutex<WorkspaceCryptoSession<ActiveKeystore>>> = OnceLock::new();
-    SESSION.get_or_init(|| {
-        Mutex::new(WorkspaceCryptoSession::new(ActiveKeystore::new()))
-    })
+    SESSION.get_or_init(|| Mutex::new(WorkspaceCryptoSession::new(ActiveKeystore::new())))
 }
 
 pub fn workspace_crypto_status() -> WorkspaceCryptoStatus {
@@ -66,6 +62,33 @@ pub fn workspace_crypto_unlock(workspace_id: String) -> Result<WorkspaceCryptoSt
     Ok(workspace_crypto_status_from(&session))
 }
 
+/// Import a restored DEK into the local keystore. Restore-only: does not provision.
+pub(crate) fn workspace_crypto_import_dek(
+    workspace_id: &str,
+    dek: Dek,
+) -> Result<WorkspaceCryptoStatus, String> {
+    let workspace_id = workspace_id.trim();
+    if workspace_id.is_empty() {
+        return Err("workspace id is required".into());
+    }
+    let mut session = crypto_session()
+        .lock()
+        .map_err(|_| "workspace crypto session lock poisoned".to_string())?;
+    session.import_dek(workspace_id, dek).map_err(map_err)?;
+    Ok(workspace_crypto_status_from(&session))
+}
+
+#[cfg(test)]
+pub(crate) fn workspace_crypto_destroy(
+    workspace_id: &str,
+) -> Result<WorkspaceCryptoStatus, String> {
+    let mut session = crypto_session()
+        .lock()
+        .map_err(|_| "workspace crypto session lock poisoned".to_string())?;
+    session.destroy(workspace_id).map_err(map_err)?;
+    Ok(workspace_crypto_status_from(&session))
+}
+
 pub fn workspace_crypto_lock() -> Result<WorkspaceCryptoStatus, String> {
     let mut session = crypto_session()
         .lock()
@@ -90,7 +113,9 @@ pub(crate) fn with_unlocked_session<T>(
     f(&session)
 }
 
-fn workspace_crypto_status_from(session: &WorkspaceCryptoSession<ActiveKeystore>) -> WorkspaceCryptoStatus {
+fn workspace_crypto_status_from(
+    session: &WorkspaceCryptoSession<ActiveKeystore>,
+) -> WorkspaceCryptoStatus {
     WorkspaceCryptoStatus {
         unlocked: session.is_unlocked(),
         workspace_id: session.unlocked_workspace_id().map(str::to_string),

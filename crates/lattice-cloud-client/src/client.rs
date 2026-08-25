@@ -6,8 +6,8 @@ use latticefs_core::{ContentHash, ResourceId};
 use crate::config::cloud_url;
 use crate::error::{CloudError, Result};
 use crate::types::{
-    AuthTokenResponse, BackupMetadataResponse, CloudWorkspaceRecord, MeResponse, PreferencesView,
-    WorkspaceSyncHead,
+    AuthTokenResponse, BackupMetadataResponse, BackupWrapKeyResponse, CloudWorkspaceRecord,
+    MeResponse, PreferencesView, WorkspaceSyncHead,
 };
 
 pub const CONTENT_HASH_HEADER: &str = "x-lattice-content-hash";
@@ -85,8 +85,8 @@ impl CloudHttpClient for HttpCloudClient {
             request = request.set("Authorization", &format!("Bearer {token}"));
         }
         let response = if let Some(payload) = body {
-            let json = serde_json::to_string(payload)
-                .map_err(|err| CloudError::Http(err.to_string()))?;
+            let json =
+                serde_json::to_string(payload).map_err(|err| CloudError::Http(err.to_string()))?;
             request
                 .set("Content-Type", "application/json")
                 .send_string(&json)
@@ -237,6 +237,11 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         self.get_json("/v1/me", Some(bearer))
     }
 
+    /// Fetch (or create) the account backup wrap key. Idempotent GET.
+    pub fn get_backup_wrap_key(&self, bearer: &str) -> Result<BackupWrapKeyResponse> {
+        self.get_json("/v1/me/backup-wrap-key", Some(bearer))
+    }
+
     /// Patch account consent flags; omitted fields keep their server-side value.
     pub fn update_preferences(
         &self,
@@ -256,7 +261,11 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
                 "at least one preference field is required".into(),
             ));
         }
-        self.put_json("/v1/me/preferences", Some(&Value::Object(body)), Some(bearer))
+        self.put_json(
+            "/v1/me/preferences",
+            Some(&Value::Object(body)),
+            Some(bearer),
+        )
     }
 
     /// Best-effort anonymous product telemetry batch. The bearer is optional:
@@ -276,9 +285,13 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
                 })
                 .collect::<Vec<_>>(),
         });
-        let response = self
-            .http
-            .request(&self.base_url, "POST", "/v1/telemetry/events", Some(&payload), bearer)?;
+        let response = self.http.request(
+            &self.base_url,
+            "POST",
+            "/v1/telemetry/events",
+            Some(&payload),
+            bearer,
+        )?;
         if (200..300).contains(&response.status) {
             return Ok(());
         }
@@ -303,7 +316,8 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         data: &[u8],
         if_match: Option<&str>,
     ) -> Result<ContentHash> {
-        let hash = ContentHash::from_bytes(data).map_err(|err| CloudError::Http(err.to_string()))?;
+        let hash =
+            ContentHash::from_bytes(data).map_err(|err| CloudError::Http(err.to_string()))?;
         let hash_hex = content_hash_hex(&hash);
         let path = format!("/v1/blobs/{resource_id}");
         let mut headers = vec![
@@ -369,8 +383,8 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         ciphertext: &[u8],
         device_id: Option<&str>,
     ) -> Result<BackupMetadataResponse> {
-        let hash = ContentHash::from_bytes(ciphertext)
-            .map_err(|err| CloudError::Http(err.to_string()))?;
+        let hash =
+            ContentHash::from_bytes(ciphertext).map_err(|err| CloudError::Http(err.to_string()))?;
         let hash_hex = content_hash_hex(&hash);
         let path = format!("/v1/workspaces/{workspace_id}/backups");
         let mut headers = vec![
@@ -391,9 +405,11 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
             &headers,
         )?;
         if response.status == 201 {
-            return decode_json(response.status, std::str::from_utf8(&response.body).map_err(
-                |err| CloudError::InvalidResponse(err.to_string()),
-            )?);
+            return decode_json(
+                response.status,
+                std::str::from_utf8(&response.body)
+                    .map_err(|err| CloudError::InvalidResponse(err.to_string()))?,
+            );
         }
         Err(bytes_api_error(response))
     }
@@ -418,14 +434,9 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         backup_id: &str,
     ) -> Result<Vec<u8>> {
         let path = format!("/v1/workspaces/{workspace_id}/backups/{backup_id}");
-        let response = self.http.request_bytes(
-            &self.base_url,
-            "GET",
-            &path,
-            None,
-            Some(bearer),
-            &[],
-        )?;
+        let response =
+            self.http
+                .request_bytes(&self.base_url, "GET", &path, None, Some(bearer), &[])?;
         if response.status == 200 {
             verify_response_content_hash(&response)?;
             return Ok(response.body);
@@ -435,14 +446,9 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
 
     pub fn get_blob(&self, bearer: &str, resource_id: ResourceId) -> Result<Vec<u8>> {
         let path = format!("/v1/blobs/{resource_id}");
-        let response = self.http.request_bytes(
-            &self.base_url,
-            "GET",
-            &path,
-            None,
-            Some(bearer),
-            &[],
-        )?;
+        let response =
+            self.http
+                .request_bytes(&self.base_url, "GET", &path, None, Some(bearer), &[])?;
         if response.status == 200 {
             verify_response_content_hash(&response)?;
             return Ok(response.body);
@@ -554,10 +560,10 @@ fn normalize_if_match(raw: &str) -> String {
 }
 
 fn parse_blob_put_response(body: &[u8], expected_hash_hex: &str) -> Result<ContentHash> {
-    let body = std::str::from_utf8(body)
-        .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
-    let metadata: BlobPutResponse = serde_json::from_str(body)
-        .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
+    let body =
+        std::str::from_utf8(body).map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
+    let metadata: BlobPutResponse =
+        serde_json::from_str(body).map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
     if metadata.content_hash != expected_hash_hex {
         return Err(CloudError::InvalidResponse(format!(
             "response hash mismatch: expected {expected_hash_hex}, got {}",
@@ -572,14 +578,12 @@ fn bytes_api_error(response: CloudHttpBytesResponse) -> CloudError {
     let message = std::str::from_utf8(&response.body)
         .ok()
         .and_then(|body| {
-            serde_json::from_str::<Value>(body)
-                .ok()
-                .and_then(|value| {
-                    value
-                        .get("error")
-                        .and_then(|error| error.as_str())
-                        .map(str::to_string)
-                })
+            serde_json::from_str::<Value>(body).ok().and_then(|value| {
+                value
+                    .get("error")
+                    .and_then(|error| error.as_str())
+                    .map(str::to_string)
+            })
         })
         .unwrap_or_else(|| {
             if response.body.is_empty() {
@@ -721,6 +725,22 @@ mod tests {
     }
 
     #[test]
+    fn get_backup_wrap_key_parses_hex() {
+        let http = FakeCloudHttp::default();
+        http.insert(
+            "GET",
+            "/v1/me/backup-wrap-key",
+            CloudHttpResponse {
+                status: 200,
+                body: r#"{"wrap_key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#.into(),
+            },
+        );
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let response = client.get_backup_wrap_key("good-token").unwrap();
+        assert_eq!(response.wrap_key.len(), 64);
+    }
+
+    #[test]
     fn session_status_round_trip_with_fake_http() {
         use crate::session::{cloud_session_status, sign_in, sign_out, MemoryCloudSessionStore};
 
@@ -776,7 +796,10 @@ mod tests {
         let signed_in = sign_in(&client, &store, "alice@example.com", "secret").unwrap();
         assert!(signed_in.signed_in);
         let status = cloud_session_status(&client, &store).unwrap();
-        assert_eq!(status.user.as_ref().map(|user| user.id.as_str()), Some("u1"));
+        assert_eq!(
+            status.user.as_ref().map(|user| user.id.as_str()),
+            Some("u1")
+        );
         let signed_out = sign_out(&client, &store).unwrap();
         assert!(!signed_out.signed_in);
         let status = cloud_session_status(&client, &store).unwrap();
@@ -803,9 +826,7 @@ mod tests {
             },
         );
         let client = CloudApiClient::with_base_url(http, "https://cloud.test");
-        let returned = client
-            .put_blob("good-token", resource_id, data)
-            .unwrap();
+        let returned = client.put_blob("good-token", resource_id, data).unwrap();
         assert_eq!(returned, hash);
     }
 
@@ -829,9 +850,7 @@ mod tests {
             },
         );
         let client = CloudApiClient::with_base_url(http, "https://cloud.test");
-        let returned = client
-            .put_blob("good-token", resource_id, data)
-            .unwrap();
+        let returned = client.put_blob("good-token", resource_id, data).unwrap();
         assert_eq!(returned, hash);
     }
 
@@ -855,9 +874,7 @@ mod tests {
             },
         );
         let client = CloudApiClient::with_base_url(http, "https://cloud.test");
-        let heads = client
-            .get_sync_heads("good-token", workspace_id)
-            .unwrap();
+        let heads = client.get_sync_heads("good-token", workspace_id).unwrap();
         assert_eq!(heads.len(), 1);
         assert_eq!(heads[0].updated_at, 1753660800);
     }

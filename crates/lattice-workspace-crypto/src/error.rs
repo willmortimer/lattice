@@ -31,6 +31,9 @@ pub enum Error {
 
     #[error("backup payload error: {message}")]
     BackupPayload { message: String },
+
+    #[error("backup envelope error: {message}")]
+    BackupEnvelope { message: String },
 }
 
 /// Result alias for this crate.

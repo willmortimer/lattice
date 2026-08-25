@@ -48,6 +48,24 @@ impl<K: Keystore> WorkspaceCryptoSession<K> {
         Ok(())
     }
 
+    /// Persist an existing DEK (restore import) and unlock the session with it.
+    ///
+    /// Replaces any previously stored DEK for `workspace_id`. Does not generate
+    /// a new key — restore must fail rather than provision on unwrap errors.
+    pub fn import_dek(&mut self, workspace_id: &str, dek: Dek) -> Result<()> {
+        self.keystore
+            .store_wrapped_dek(workspace_id, dek.as_bytes())?;
+        self.workspace_id = Some(workspace_id.to_string());
+        self.dek = Some(dek);
+        Ok(())
+    }
+
+    /// Wrap the unlocked DEK under `wrap_key` for a backup envelope.
+    pub fn wrap_unlocked_dek(&self, wrap_key: &Dek) -> Result<Vec<u8>> {
+        let dek = self.dek.as_ref().ok_or(Error::Locked)?;
+        encrypt_blob(wrap_key, dek.as_bytes())
+    }
+
     /// Load the wrapped DEK from the keystore into memory.
     pub fn unlock(&mut self, workspace_id: &str) -> Result<()> {
         if self.dek.is_some() {
