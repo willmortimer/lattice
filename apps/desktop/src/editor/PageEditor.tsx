@@ -31,6 +31,7 @@ import {
 } from "@phosphor-icons/react";
 
 import { registerPageAnchorSurface } from "../agent/adapters/surfaces";
+import { useCloudSessionQuery } from "../query/useCloudSessionQuery";
 import { ConflictEnvelope } from "./ConflictEnvelope";
 import { liveEditorExtensions, collabLiveEditorExtensions } from "./richEditorExtensions";
 import {
@@ -169,8 +170,6 @@ interface PageEditorProps {
   /** Registry ResourceId for collab open (never `path:` synthetic). */
   collabDocId?: string;
   collaborativeAvailable?: boolean;
-  /** Labs: cloud Yrs snapshot exchange when signed in. */
-  remoteYrsProvider?: boolean;
   onPersistModeChange?: (mode: PagePersistMode) => void;
 }
 
@@ -225,11 +224,13 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     pagePath,
     collabDocId,
     collaborativeAvailable = false,
-    remoteYrsProvider = false,
     onPersistModeChange,
   },
   ref,
 ) {
+  const { data: cloudSession } = useCloudSessionQuery();
+  const remoteProviderEnabled = collaborativeAvailable && cloudSession?.signedIn === true;
+
   const [{ frontmatter, body: initialBody }] = useState(() => splitFrontmatter(raw));
   const initialDoc = useMemo(() => parseMarkdownToJSON(initialBody), [initialBody]);
 
@@ -555,7 +556,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       workspaceRoot,
       docId: collabDocId,
       pagePath,
-      remoteProviderEnabled: remoteYrsProvider,
+      remoteProviderEnabled,
       onError: (message) => {
         if (!cancelled) setCollabError(message);
       },
@@ -586,7 +587,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         setCollabYdoc(null);
       });
     };
-  }, [collabDocId, pagePath, persistMode, remoteYrsProvider, workspaceRoot]);
+  }, [collabDocId, pagePath, persistMode, remoteProviderEnabled, workspaceRoot]);
 
   const editorExtensions = useMemo(() => {
     if (persistMode === "collaborative" && collabYdoc && collabAwareness) {

@@ -106,13 +106,16 @@ export interface DesktopSettings {
     shellTourFinished: boolean;
   };
   labs: {
-    /** Opt-in Yjs collaborative page editing (requires registry ResourceId). */
-    collaborativePageEditor: boolean;
     /**
-     * When collaborative + cloud signed-in, exchange Yrs snapshots via cloud
-     * blob sidecar (does not replace local journal).
+     * Legacy YAML field. Loaded so old profiles deserialize; ignored for
+     * collaborative chrome (availability is registry ResourceId).
      */
-    remoteYrsProvider: boolean;
+    collaborativePageEditor?: boolean;
+    /**
+     * Legacy in-memory field (never persisted in Rust LabsSettings). Ignored
+     * for remote Yrs (signed-in cloud session + collaborative availability).
+     */
+    remoteYrsProvider?: boolean;
   };
 }
 
@@ -209,10 +212,7 @@ export function defaultDesktopSettings(): DesktopSettings {
     guidance: {
       shellTourFinished: false,
     },
-    labs: {
-      collaborativePageEditor: false,
-      remoteYrsProvider: false,
-    },
+    labs: {},
   };
 }
 

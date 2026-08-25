@@ -50,7 +50,8 @@ snapshot and start a new log (optionally recording the snapshot content hash in
 
 ## Client path
 
-1. Desktop Labs toggles: collaborative page editor + remote Yrs provider.
+1. Collaborative page editor on pages with a registry ResourceId. Remote Yrs
+   catch-up runs when collaborative mode is available and Cloud is signed in.
 2. When remote is enabled and cloud is signed in, `openCollabSession` polls the
    **LYRL append log** on each remote sync interval: pull sidecar → apply each
    lib0 update to the Y.Doc (and daemon journal). If no log exists yet, fall back

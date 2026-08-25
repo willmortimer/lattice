@@ -30,10 +30,6 @@ export interface FeaturesSettingsProps {
   workspaceRoot: string | null;
   semanticEnabled: boolean;
   onSemanticEnabledChange: (semanticEnabled: boolean) => void;
-  collaborativePageEditor: boolean;
-  onCollaborativePageEditorChange: (enabled: boolean) => void;
-  remoteYrsProvider: boolean;
-  onRemoteYrsProviderChange: (enabled: boolean) => void;
   onOpenPacks: () => void;
   onOpenCapabilities: () => void;
 }
@@ -74,10 +70,6 @@ export function FeaturesSettings({
   workspaceRoot,
   semanticEnabled,
   onSemanticEnabledChange,
-  collaborativePageEditor,
-  onCollaborativePageEditorChange,
-  remoteYrsProvider,
-  onRemoteYrsProviderChange,
   onOpenPacks,
   onOpenCapabilities,
 }: FeaturesSettingsProps) {
@@ -276,29 +268,6 @@ export function FeaturesSettings({
             use Inspect, the Files tree context menu, or the command palette on a selected resource.
             Requires Settings → Cloud account sign-in.
           </p>
-          <SettingRow
-            settingId="features.labs-collaborative-page"
-            title="Labs collaborative page editor"
-            description="Show Plain file / Collaborative toggles on pages with a registry ResourceId. Collaborative edits sync via Yjs daemon sessions — not markdown autosave."
-          >
-            <Toggle
-              checked={collaborativePageEditor}
-              onChange={onCollaborativePageEditorChange}
-              label="Enable collaborative page editor (Labs)"
-            />
-          </SettingRow>
-          <SettingRow
-            settingId="features.labs-remote-yrs"
-            title="Labs remote Yrs provider"
-            description="When collaborative Labs is on and you are signed in, live edits catch up through the cloud; the local journal stays authoritative."
-          >
-            <Toggle
-              checked={remoteYrsProvider}
-              onChange={onRemoteYrsProviderChange}
-              label="Enable remote Yrs provider (Labs)"
-              disabled={!collaborativePageEditor}
-            />
-          </SettingRow>
           <SettingRow
             settingId="features.labs-cloud-blob"
             title="Labs cloud blob put/get"

@@ -27,6 +27,6 @@ open **Inspect** on that item or **Show agent** for help with the workspace.
   (requires **Settings → Cloud account**).
 - **Restore a workspace** — **Settings → Cloud account → Encrypted workspace backup**
   (pick a backup and a folder). Inspect restores into the open workspace.
-- **Shared page editing** — **Settings → Features → Labs**, then **Plain file** /
-  **Collaborative** on eligible pages (see [Collaborative pages](collaboration.md)).
+- **Shared page editing** — **Plain file** / **Collaborative** on pages with a
+  resource ID (see [Collaborative pages](collaboration.md)).
 - **Screenshot to inbox** — **⌘⇧2** (Screen Clip), then open **Capture Inbox** in Files.

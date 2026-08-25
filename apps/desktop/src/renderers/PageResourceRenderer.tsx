@@ -89,24 +89,17 @@ export function PageResourceRenderer({
         setRegistryResourceId(statId);
       }
       const registryId = fromCatalog ?? statId;
-      if (registryId && settings.labs.collaborativePageEditor) {
-        setPersistMode(persistModeFromResourceStat(stat, registryId, true));
+      if (registryId) {
+        setPersistMode(persistModeFromResourceStat(stat, registryId));
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [
-    context.catalog,
-    context.workspaceRoot,
-    pagePath,
-    settings.labs.collaborativePageEditor,
-  ]);
+  }, [context.catalog, context.workspaceRoot, pagePath]);
 
   const collaborativeAvailable =
-    settings.labs.collaborativePageEditor &&
-    registryResourceId !== undefined &&
-    looksLikeLatticeResourceId(registryResourceId);
+    registryResourceId !== undefined && looksLikeLatticeResourceId(registryResourceId);
 
   useEffect(() => {
     if (!collaborativeAvailable && persistMode === "collaborative") {
@@ -148,7 +141,6 @@ export function PageResourceRenderer({
           pagePath={pagePath}
           collabDocId={registryResourceId}
           collaborativeAvailable={collaborativeAvailable}
-          remoteYrsProvider={settings.labs.remoteYrsProvider}
           onPersistModeChange={handlePersistModeChange}
           onSaveStateChange={callbacks.onSaveStateChange}
           onOpenWiki={callbacks.onOpenWiki}

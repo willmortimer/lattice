@@ -37,7 +37,7 @@ describe("persistModeFromResourceStat", () => {
     version_id: null,
   };
 
-  it("returns plain when Labs collab is off", () => {
+  it("returns plain when registry id is missing", () => {
     const stat: ResourceStat = {
       ...baseStat,
       resource_authority: {
@@ -45,9 +45,7 @@ describe("persistModeFromResourceStat", () => {
         doc_id: baseStat.resource_id,
       },
     };
-    expect(
-      persistModeFromResourceStat(stat, baseStat.resource_id, false),
-    ).toBe("plain");
+    expect(persistModeFromResourceStat(stat, undefined)).toBe("plain");
   });
 
   it("returns collaborative when authority doc_id matches registry id", () => {
@@ -58,9 +56,7 @@ describe("persistModeFromResourceStat", () => {
         doc_id: baseStat.resource_id,
       },
     };
-    expect(
-      persistModeFromResourceStat(stat, baseStat.resource_id, true),
-    ).toBe("collaborative");
+    expect(persistModeFromResourceStat(stat, baseStat.resource_id)).toBe("collaborative");
   });
 
   it("returns plain when collaborative doc_id does not match registry id", () => {
@@ -71,9 +67,7 @@ describe("persistModeFromResourceStat", () => {
         doc_id: "018f3c2a-7b2e-7f3a-9c1d-2e4f5a6b7c8e",
       },
     };
-    expect(
-      persistModeFromResourceStat(stat, baseStat.resource_id, true),
-    ).toBe("plain");
+    expect(persistModeFromResourceStat(stat, baseStat.resource_id)).toBe("plain");
   });
 });
 

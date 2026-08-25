@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveSettingsDeepLink } from "./settingsCatalog";
+import { SETTINGS_SEARCH_INDEX, resolveSettingsDeepLink } from "./settingsCatalog";
 import { parseSettingsDeepLinkUrl } from "./settingsDeepLink";
 
 describe("parseSettingsDeepLinkUrl", () => {
@@ -38,5 +38,13 @@ describe("resolveSettingsDeepLink", () => {
       section: "appearance",
       settingId: null,
     });
+  });
+
+  it("does not catalog graduated collaborative Labs toggles", () => {
+    const ids = SETTINGS_SEARCH_INDEX.map((item) => item.id);
+    expect(ids).not.toContain("features.labs-collaborative-page");
+    expect(ids).not.toContain("features.labs-remote-yrs");
+    expect(ids).toContain("features.labs-cloud-blob");
+    expect(ids).toContain("features.labs-cloud-sync");
   });
 });

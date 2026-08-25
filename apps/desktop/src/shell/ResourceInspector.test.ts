@@ -37,7 +37,6 @@ describe("ResourceInspector conflict / collaboration predicates", () => {
   it("labels Collaboration Collaborative vs Plain file", () => {
     expect(
       inspectCollaborationLabel({
-        collaborativePageEditor: true,
         resourceKind: "page",
         hasRegistryResourceId: true,
         persistMode: "collaborative",
@@ -45,7 +44,6 @@ describe("ResourceInspector conflict / collaboration predicates", () => {
     ).toBe("Collaborative");
     expect(
       inspectCollaborationLabel({
-        collaborativePageEditor: true,
         resourceKind: "page",
         hasRegistryResourceId: true,
         persistMode: "plain",

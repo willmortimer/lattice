@@ -32,7 +32,7 @@ export interface CollabSessionOptions {
   docId: string;
   pagePath: string;
   /**
-   * Labs: exchange Yrs updates via cloud blob sidecar when signed in.
+   * Exchange Yrs updates via cloud blob sidecar when signed in.
    * Local daemon journal remains source of truth; remote is optional peer catch-up.
    */
   remoteProviderEnabled?: boolean;

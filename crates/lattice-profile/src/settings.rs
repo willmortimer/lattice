@@ -538,9 +538,13 @@ pub struct GuidanceSettings {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LabsSettings {
-    /// Opt-in Yjs collaborative page editing (requires registry ResourceId).
+    /// Legacy YAML field. Loaded so old profiles deserialize; ignored for
+    /// collaborative chrome (availability is registry ResourceId).
     #[serde(default)]
     pub collaborative_page_editor: bool,
+    /// Legacy field from desktop JSON. Never gated product chrome; skip writing.
+    #[serde(default, skip_serializing)]
+    pub remote_yrs_provider: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -949,8 +949,6 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 onReloadActivePage={() => {
                   void reloadPageFromDisk();
                 }}
-                collaborativePageEditor={settings.labs.collaborativePageEditor}
-                remoteYrsProvider={settings.labs.remoteYrsProvider}
                 pagePersistMode={pagePersistMode}
                 workspaceId={snapshot?.id ?? null}
               />

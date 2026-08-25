@@ -68,10 +68,9 @@ describe("formatSyncConflictResolveError", () => {
 });
 
 describe("inspectCollaborationLabel", () => {
-  it("returns Collaborative when labs on, page, registry id, collaborative mode", () => {
+  it("returns Collaborative when page has registry id and collaborative mode", () => {
     expect(
       inspectCollaborationLabel({
-        collaborativePageEditor: true,
         resourceKind: "page",
         hasRegistryResourceId: true,
         persistMode: "collaborative",
@@ -79,10 +78,9 @@ describe("inspectCollaborationLabel", () => {
     ).toBe("Collaborative");
   });
 
-  it("returns Plain file when labs on but persist mode is plain", () => {
+  it("returns Plain file when persist mode is plain", () => {
     expect(
       inspectCollaborationLabel({
-        collaborativePageEditor: true,
         resourceKind: "page",
         hasRegistryResourceId: true,
         persistMode: "plain",
@@ -90,24 +88,15 @@ describe("inspectCollaborationLabel", () => {
     ).toBe("Plain file");
   });
 
-  it("hides the row when labs off or not a registry page", () => {
+  it("hides the row when not a registry page", () => {
     expect(
       inspectCollaborationLabel({
-        collaborativePageEditor: false,
-        resourceKind: "page",
-        hasRegistryResourceId: true,
-      }),
-    ).toBeNull();
-    expect(
-      inspectCollaborationLabel({
-        collaborativePageEditor: true,
         resourceKind: "page",
         hasRegistryResourceId: false,
       }),
     ).toBeNull();
     expect(
       inspectCollaborationLabel({
-        collaborativePageEditor: true,
         resourceKind: "canvas",
         hasRegistryResourceId: true,
       }),

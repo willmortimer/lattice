@@ -46,6 +46,7 @@ import type { DataAppSnapshot } from "../data/types";
 import { inBrowser } from "../demo";
 import { openHelpDeepLink } from "../help";
 import { KIND_LABELS } from "../KindMark";
+import { useCloudSessionQuery } from "../query/useCloudSessionQuery";
 import type { Backlink, Resource } from "../types";
 import { InspectorHistoryPanel } from "./InspectorHistoryPanel";
 import { useDesktopUiStore } from "./desktopUiStore";
@@ -99,8 +100,6 @@ export function ResourceInspector({
   onClose,
   onOpenFile,
   onReloadActivePage,
-  collaborativePageEditor = false,
-  remoteYrsProvider = false,
   pagePersistMode = "plain",
   workspaceId = null,
 }: {
@@ -113,15 +112,12 @@ export function ResourceInspector({
   onOpenFile: (path: string) => void;
   /** Reload the open page editor after cloud bytes were written to the workspace file. */
   onReloadActivePage?: () => void;
-  /** Labs: collaborative page editor enabled (from shell settings). */
-  collaborativePageEditor?: boolean;
-  /** Labs: remote Yrs provider enabled (diagnostics-only hint). */
-  remoteYrsProvider?: boolean;
   /** Active page persist mode from the page chrome (Inspect visibility only). */
   pagePersistMode?: PagePersistMode;
   /** Open workspace id for encrypted backup restore. */
   workspaceId?: string | null;
 }) {
+  const { data: cloudSession } = useCloudSessionQuery();
   const [section, setSection] = useState<(typeof SECTIONS)[number]>("properties");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
@@ -236,12 +232,11 @@ export function ResourceInspector({
   const collaborationLabel = useMemo(
     () =>
       inspectCollaborationLabel({
-        collaborativePageEditor,
         resourceKind: resource?.kind,
         hasRegistryResourceId: Boolean(displayId && !displayId.isSynthetic),
         persistMode: pagePersistMode,
       }),
-    [collaborativePageEditor, resource?.kind, displayId, pagePersistMode],
+    [resource?.kind, displayId, pagePersistMode],
   );
 
   const canRestoreEncryptedBackup = Boolean(root && workspaceId && !inBrowser);
@@ -771,10 +766,9 @@ export function ResourceInspector({
           <div className="inspector-copy">
             <p>{error ? "Problem reported" : "No active diagnostics"}</p>
             <span>{error ?? "The selected resource is loaded without a reported conflict."}</span>
-            {remoteYrsProvider && collaborativePageEditor ? (
+            {cloudSession?.signedIn ? (
               <span className="inspector-id-note">
-                remote Yrs log available (LYRL) — labs remote provider on; local journal stays
-                authoritative.
+                remote Yrs log available (LYRL) — signed in; local journal stays authoritative.
               </span>
             ) : null}
           </div>

@@ -87,9 +87,8 @@ export function persistModeFromResourceAuthority(
 export function persistModeFromResourceStat(
   stat: ResourceStat,
   registryResourceId: string | undefined,
-  labsCollabOn: boolean,
 ): PagePersistMode {
-  if (!labsCollabOn || !registryResourceId) {
+  if (!registryResourceId) {
     return "plain";
   }
   const authority = stat.resource_authority;
