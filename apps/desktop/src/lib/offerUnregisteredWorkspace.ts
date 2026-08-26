@@ -46,7 +46,7 @@ export function offerForUnregisteredOpen(payload: UnregisteredOpenPayload): Unre
       return { action: "toast", path: payload.path };
     default: {
       const _exhaustive: never = payload.kind;
-      return { action: "toast", path: payload.path };
+      return _exhaustive;
     }
   }
 }
