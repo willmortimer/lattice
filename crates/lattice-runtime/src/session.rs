@@ -43,16 +43,15 @@ impl WorkspaceSession {
         let workspace = Workspace::open(canonical_root)?;
         let command_engine = CommandEngine::open(canonical_root)?;
         let index = WorkspaceIndex::open(canonical_root)?;
-        let catalog = match workspace.scan() {
-            Ok(resources) => Some(ResourceCatalog::new(&resources)),
-            Err(_) => None,
-        };
+        // Do not Workspace::scan() here: IPC snapshots stay empty and the tree
+        // hydrates via list_children + catalog-delta. A full scan made open pay
+        // for every file even after CATALOG-OPEN emptied the snapshot payload.
         Ok(Self {
             root: canonical_root.to_path_buf(),
             workspace,
             command_engine: Mutex::new(command_engine),
             index,
-            catalog: Mutex::new(catalog),
+            catalog: Mutex::new(Some(ResourceCatalog::new(&[]))),
             index_rebuild_count: AtomicU64::new(0),
             write_lease: Mutex::new(None),
             idempotency: IdempotencyCache::default(),

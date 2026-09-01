@@ -190,6 +190,17 @@ mod tests {
                 .any(|entry| entry.path == "bulk/nested/leaf.md"),
             "list_children still lists nested files after identity-only open"
         );
+
+        let session = lattice_runtime::default_runtime()
+            .open_workspace_session(dir.path())
+            .unwrap();
+        session.with_resource_catalog(|catalog| {
+            let catalog = catalog.expect("session catalog");
+            assert!(
+                catalog.targets().is_empty(),
+                "WorkspaceSession::open must not full-scan into the runtime catalog"
+            );
+        });
     }
 
     #[test]

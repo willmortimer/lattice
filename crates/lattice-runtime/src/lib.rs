@@ -368,6 +368,33 @@ mod tests {
     }
 
     #[test]
+    fn open_workspace_session_does_not_scan_files_into_resource_catalog() {
+        let dir = init_workspace();
+        std::fs::create_dir_all(dir.path().join("bulk/nested")).unwrap();
+        for index in 0..40 {
+            std::fs::write(
+                dir.path().join(format!("bulk/file-{index:02}.md")),
+                format!("# {index}\n"),
+            )
+            .unwrap();
+        }
+        std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
+        let runtime = LatticeRuntime::new();
+        let session = runtime.open_workspace_session(dir.path()).unwrap();
+        session.with_resource_catalog(|catalog| {
+            let catalog = catalog.expect("session catalog");
+            assert!(
+                catalog.targets().is_empty(),
+                "open must not Workspace::scan into the runtime catalog"
+            );
+        });
+        assert!(
+            session.workspace().scan().unwrap().len() > 1,
+            "files are still on disk for list_children / explicit scan"
+        );
+    }
+
+    #[test]
     fn concurrent_reads_share_one_session() {
         let dir = init_workspace();
         std::fs::write(
