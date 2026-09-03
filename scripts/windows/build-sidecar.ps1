@@ -49,11 +49,30 @@ if ($Package -and $Bin) {
 }
 
 Write-Host "build-sidecar: CARGO_TARGET_DIR=$env:CARGO_TARGET_DIR"
-Write-Host "build-sidecar: packages=latticed,lattice-agentd,lattice-embed-host (release, llama-cpp)"
+Write-Host "build-sidecar: cohort=latticed,lattice-agentd,lattice-embed-host (release, llama-cpp)"
 
-Build-LatticeSidecar -Pkg "lattice-daemon" -Binary "latticed"
-Build-LatticeSidecar -Pkg "lattice-agentd" -Binary "lattice-agentd"
-Build-LatticeSidecar -Pkg "lattice-embed-host" -Binary "lattice-embed-host" -FeatureList "llama-cpp"
+# One Cargo invocation so shared crates compile once (same target dir, same lock).
+$cohortArgs = @(
+  "build", "--release",
+  "--target", $script:LatticeWindowsTriple,
+  "-p", "lattice-daemon", "--bin", "latticed",
+  "-p", "lattice-agentd", "--bin", "lattice-agentd",
+  "-p", "lattice-embed-host", "--bin", "lattice-embed-host",
+  "--features", "lattice-embed-host/llama-cpp"
+)
+Write-Host "build-sidecar: cargo $($cohortArgs -join ' ')"
+& cargo.exe @cohortArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "build-sidecar: cargo cohort build failed (exit $LASTEXITCODE)"
+}
+
+foreach ($name in @("latticed", "lattice-agentd", "lattice-embed-host")) {
+  $out = Get-LatticeWindowsSidecarExePath -Name $name
+  if (-not (Test-Path $out)) {
+    throw "build-sidecar: missing $out after cohort build"
+  }
+  Write-Host "build-sidecar: ok → $out"
+}
 
 Write-Host "build-sidecar: OK"
 exit 0

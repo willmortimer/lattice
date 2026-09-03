@@ -46,9 +46,13 @@ Provides: rustc, cargo, rustfmt, clippy, sccache, rust-analyzer, node 22, pnpm,
 pkg-config, **nxr** (plus Tauri's GTK/WebKit stack on Linux). macOS app
 bundling additionally needs Xcode Command Line Tools / Xcode (outside nix).
 
-The shell sets `RUSTC_WRAPPER=sccache` and a Lattice-specific `SCCACHE_DIR`.
-Run `sccache --show-stats` after builds to inspect cache hits. CI on Linux
-should set `SCCACHE_DIR` explicitly when the default XDG path is unsuitable.
+The shell **and every NXR/flake cargo app** set `RUSTC_WRAPPER=sccache` and a
+Lattice-specific `SCCACHE_DIR`. cc-rs (DuckDB bundled) can reuse that wrapper
+for C/C++ objects. `rust-validate` prints `rustc -Vv` / `sccache --show-stats`
+inside the Nix app. Tagged GitHub Actions (`v*` only) export
+`CARGO_INCREMENTAL=0` (sccache cannot cache incremental rustc) and persist
+`SCCACHE_DIR`; local NXR tasks do not. On Linux, flake apps pass
+`-C link-arg=-fuse-ld=mold` when `mold` and `clang` are on PATH.
 
 Session-local nxr completion is enabled via `nxr.shellIntegration` (no global
 dotfile writes). After `direnv allow`, `nxr` should tab-complete in zsh/bash
@@ -160,14 +164,17 @@ Tasks coordinate apps; they do not replace them. Useful graphs:
 | `js-deps` | Bootstrap pnpm install + refresh js-deps stamp |
 | `codegen` (alias `compile`) | `compile-theme` ∥ `compile-templates` |
 | `prepare-first-look` (alias `prep-demo`) | seed First Look datasets + `compile-templates` + path sanity check |
-| `validate` | `lint` ∥ `test` ∥ `desktop-ui-build` |
-| `check` (alias `ci`) | monolithic `apps.check` (what CI should keep calling) |
+| `validate` | `rust-fmt-check` ∥ `rust-validate` ∥ `desktop-ui-build` |
+| `rust-validate` (alias `rust-ci`) | clippy then tests in **one** `cargo-target` (the CI rust leaf) |
+| `check` | monolithic escape hatch (`apps.check`); prefer `nxr task ci` |
+| `ci` (alias `ci-fast`) | authoritative DAG: rust-validate + fmt + JS + flake-check |
+| `build-sidecars` | one `cargo build --release` for latticed/agentd/embed-host/voice-host |
 | `desktop-install` (alias `install`) | local signed macOS install |
 | `desktop-release` (alias `release`) | Developer ID notarize + DMG |
 
-CI should run exactly one **blocking** thing: `nix run .#check` (or
-`nxr task check`). Browser perf runs separately as a non-blocking GitHub
-Action on `main` ([`desktop-perf.yml`](../../.github/workflows/desktop-perf.yml));
+CI should run `nxr task ci` locally. `nix run .#check` remains the serial
+escape hatch. GitHub Actions (including browser perf) runs only on `v*` tags
+([`desktop-perf.yml`](../../.github/workflows/desktop-perf.yml));
 see [perf-harness.md](./perf-harness.md). Tauri perf is not in CI.
 
 ### Local macOS install
@@ -219,10 +226,9 @@ sops exec-env secrets/apple.env -- nix run .#desktop-release
 Optional: `LATTICE_RELEASE_DIR` to redirect the DMG output directory.
 
 Notarytool needs network access to Apple; the signing private key may prompt
-Keychain on first use. There is a manual stub workflow at
+Keychain on first use. There is a tag-only stub workflow at
 [`.github/workflows/desktop-release.yml`](../../.github/workflows/desktop-release.yml)
-(`workflow_dispatch` / `v*` tags) that **skips cleanly** when Apple CI secrets
-are unset so open-source PR CI is unaffected.
+(`v*` tags) that **skips cleanly** when Apple CI secrets are unset.
 
 See [environment.md](./environment.md) and [secrets/README.md](../../secrets/README.md).
 

@@ -111,7 +111,7 @@ Tauri) use `.devcontainer/` and `scripts/devcontainer/` — see
 `docs/dev/devcontainer.md`.
 Nix remains the source of truth for the native desktop shell.
 
-Prefer [nxr](https://github.com/willmortimer/nxr) (pinned `v3.4.0`) as the
+Prefer [nxr](https://github.com/willmortimer/nxr) (pinned `v3.6.0`) as the
 command plane. Flake apps stay authoritative leaves; `nxr task` orchestrates.
 
 ```sh
@@ -122,6 +122,7 @@ nxr list --namespace client
 nxr list --category validation
 
 nxr task ci -j 8                # authoritative CI DAG (alias: ci-fast)
+# GitHub Actions run only on v* tags; day-to-day validate is local NXR.
 nxr task validate -j 8          # faster subset
 nxr task codegen -j 2
 nxr graph ci
@@ -130,7 +131,7 @@ nxr task --affected --base origin/main -j 8
 nxr up desktop-web              # local process preview
 nxr desktop-dev                 # Tauri + Vite
 nxr task desktop-install        # context: apple-development
-nxr task desktop-release        # DAG: build∥sidecars → sign → notary → dmg
+nxr task desktop-release        # DAG: tauri bundle ∥ sidecar cohort → sign → notary → dmg
 nxr graph desktop-release
 # env only (no build):
 LATTICE_RELEASE_VALIDATE_ONLY=1 nxr task release-env-validate

@@ -31,6 +31,21 @@ function Initialize-LatticeWindowsCargoEnv {
   New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
   $env:CARGO_TARGET_DIR = $targetDir
 
+  if (Get-Command sccache.exe -ErrorAction SilentlyContinue) {
+    if (-not $env:RUSTC_WRAPPER) {
+      $env:RUSTC_WRAPPER = "sccache"
+    }
+    if (-not $env:SCCACHE_DIR) {
+      $sccacheDir = Join-Path $env:LOCALAPPDATA "Lattice\sccache"
+      New-Item -ItemType Directory -Force -Path $sccacheDir | Out-Null
+      $env:SCCACHE_DIR = $sccacheDir
+    }
+    if (-not $env:SCCACHE_CACHE_SIZE) {
+      $env:SCCACHE_CACHE_SIZE = "20G"
+    }
+    Write-Host "lattice-windows: RUSTC_WRAPPER=$($env:RUSTC_WRAPPER) SCCACHE_DIR=$($env:SCCACHE_DIR)"
+  }
+
   $protocBin = Join-Path $env:LOCALAPPDATA "NixPlane\protoc\bin"
   if (Test-Path $protocBin) {
     $env:Path = "$protocBin;$env:Path"

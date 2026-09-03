@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     # Pin releases — do not track nxr main from consumer flakes.
-    nxr.url = "github:willmortimer/nxr/v3.4.0";
+    nxr.url = "github:willmortimer/nxr/v3.6.0";
     flake-parts.follows = "nxr/flake-parts";
     flake-schemas.url = "github:DeterminateSystems/flake-schemas";
   };
@@ -55,13 +55,18 @@
               libayatana-appindicator
               librsvg
               openssl
-            ];
+              clang
+              mold
+            ]
+            ++ [ cargo-nextest ];
 
           descriptions = {
             test = "Run cargo test --workspace";
             rust-test = "Run cargo test --workspace";
+            rust-validate = "Clippy then tests in one cargo-target (CI rust leaf)";
             rust-fmt-check = "cargo fmt --all --check";
             rust-clippy = "cargo clippy --workspace --all-targets -D warnings";
+            build-sidecars = "Release-build all sidecars in one Cargo invocation";
             lint = "Clippy + rustfmt check (compat; prefer rust-clippy ∥ rust-fmt-check)";
             fmt = "Format all Rust sources";
             check = "Monolithic escape hatch: fmt, clippy, tests, desktop build";
@@ -107,12 +112,69 @@
             windows-nsis-demo-bundle = "Mac→nixdev winbuild: unsigned NSIS First Look demo installer";
           };
 
+          rustCacheEnv = ''
+            export RUSTC_WRAPPER="''${RUSTC_WRAPPER:-sccache}"
+            if [ "$(uname -s)" = "Darwin" ]; then
+              export SCCACHE_DIR="''${SCCACHE_DIR:-$HOME/Library/Caches/Lattice/sccache}"
+            else
+              export SCCACHE_DIR="''${SCCACHE_DIR:-''${XDG_CACHE_HOME:-$HOME/.cache}/lattice/sccache}"
+            fi
+            export SCCACHE_CACHE_SIZE="''${SCCACHE_CACHE_SIZE:-10G}"
+            if [ "$(uname -s)" = "Linux" ] && command -v mold >/dev/null && command -v clang >/dev/null; then
+              export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="''${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER:-clang}"
+              export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="''${CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER:-clang}"
+              case " ''${RUSTFLAGS:-} " in
+                *"fuse-ld=mold"*) ;;
+                *) export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-fuse-ld=mold" ;;
+              esac
+            fi
+          '';
+
           scripts = {
             test = ''
               exec cargo test --workspace "$@"
             '';
             rust-test = ''
+              if command -v cargo-nextest >/dev/null 2>&1; then
+                exec cargo nextest run --workspace "$@"
+              fi
               exec cargo test --workspace "$@"
+            '';
+            rust-validate = ''
+              echo "===== rust-validate toolchain ====="
+              rustc -Vv
+              cargo -V
+              if [ -n "''${CARGO_INCREMENTAL+x}" ]; then
+                echo "CARGO_INCREMENTAL=$CARGO_INCREMENTAL"
+              else
+                echo "CARGO_INCREMENTAL=<unset>"
+              fi
+              if command -v sccache >/dev/null 2>&1; then
+                sccache --version
+                sccache --zero-stats || true
+              else
+                echo "rust-validate: sccache not on PATH" >&2
+              fi
+
+              status=0
+              # Default clippy levels (correctness is already deny). Do not pass
+              # `-D warnings` here: the old GHA matrix never ran `rust-clippy`,
+              # and promoting every warning would turn this leaf into a lint
+              # cleanup PR. Local `nxr task rust-clippy` still uses `-D warnings`.
+              cargo clippy --workspace --all-targets || status=$?
+              if [ "$status" -eq 0 ]; then
+                if command -v cargo-nextest >/dev/null 2>&1; then
+                  cargo nextest run --workspace "$@" || status=$?
+                else
+                  cargo test --workspace "$@" || status=$?
+                fi
+              fi
+
+              if command -v sccache >/dev/null 2>&1; then
+                echo "===== sccache --show-stats (Rust vs C/C++) ====="
+                sccache --show-stats || true
+              fi
+              exit "$status"
             '';
             rust-fmt-check = ''
               exec cargo fmt --all --check "$@"
@@ -273,6 +335,9 @@
             build-voice-host = ''
               exec bash scripts/release/build-sidecar.sh lattice-voice-host lattice-voice-host fluidaudio
             '';
+            build-sidecars = ''
+              exec bash scripts/release/build-sidecars.sh "$@"
+            '';
             verify-sidecars = ''
               exec bash scripts/release/verify-sidecars.sh "$@"
             '';
@@ -346,7 +411,7 @@
             pkgs.writeShellApplication {
               name = "lattice-${name}";
               runtimeInputs = runtimeInputsFor name;
-              text = script;
+              text = rustCacheEnv + script;
             }
           ) scripts;
 
@@ -551,7 +616,7 @@
           nxr.apps = lib.mapAttrs (name: script: {
             description = descriptions.${name};
             runtimeInputs = runtimeInputsFor name;
-            inherit script;
+            script = rustCacheEnv + script;
           }) scripts;
 
           # Orchestration around flake apps. Leaf apps stay authoritative;
@@ -648,8 +713,7 @@
                 app = "ok";
                 dependsOn = [
                   "rust-fmt-check"
-                  "rust-clippy"
-                  "rust-test"
+                  "rust-validate"
                   "desktop-ui-test"
                   "desktop-ui-build"
                   "generated-theme-check"
@@ -660,15 +724,22 @@
                 aliases = [ "ci-fast" ];
               };
               validate = {
-                description = "Fast parallel validation (lint ∥ test ∥ desktop UI)";
+                description = "Fast parallel validation (rust-validate ∥ desktop UI)";
                 dependsOn = [
-                  "rust-clippy"
                   "rust-fmt-check"
-                  "rust-test"
+                  "rust-validate"
                   "desktop-ui-build"
                 ];
                 app = "ok";
                 category = "validation";
+              };
+              rust-validate = {
+                description = "Clippy then tests sharing one cargo-target";
+                app = "rust-validate";
+                category = "validation";
+                aliases = [ "rust-ci" ];
+                paths = rustPaths;
+                resources = cargoLock;
               };
               desktop-ui-test = {
                 description = "Desktop Vitest";
@@ -996,7 +1067,7 @@
                 };
               };
               build-latticed = {
-                description = "Release-build latticed";
+                description = "Release-build latticed (single binary; prefer build-sidecars)";
                 app = "build-latticed";
                 category = "release";
                 dependsOn = [ "release-env-validate" ];
@@ -1005,7 +1076,7 @@
                 };
               };
               build-agentd = {
-                description = "Release-build lattice-agentd";
+                description = "Release-build lattice-agentd (single binary; prefer build-sidecars)";
                 app = "build-agentd";
                 category = "release";
                 dependsOn = [ "release-env-validate" ];
@@ -1014,7 +1085,7 @@
                 };
               };
               build-embed-host = {
-                description = "Release-build lattice-embed-host";
+                description = "Release-build lattice-embed-host (single binary; prefer build-sidecars)";
                 app = "build-embed-host";
                 category = "release";
                 dependsOn = [ "release-env-validate" ];
@@ -1023,7 +1094,7 @@
                 };
               };
               build-voice-host = {
-                description = "Release-build lattice-voice-host";
+                description = "Release-build lattice-voice-host (single binary; prefer build-sidecars)";
                 app = "build-voice-host";
                 category = "release";
                 dependsOn = [ "release-env-validate" ];
@@ -1031,16 +1102,22 @@
                   exclusive = [ "cargo-target" ];
                 };
               };
+              build-sidecars = {
+                description = "Release-build all sidecars in one Cargo cohort";
+                app = "build-sidecars";
+                category = "release";
+                dependsOn = [ "release-env-validate" ];
+                resources = {
+                  cpu = 4;
+                  memory = "8GiB";
+                  exclusive = [ "cargo-target" ];
+                };
+              };
               verify-sidecars = {
                 description = "Verify release sidecars";
                 app = "verify-sidecars";
                 category = "release";
-                dependsOn = [
-                  "build-latticed"
-                  "build-agentd"
-                  "build-embed-host"
-                  "build-voice-host"
-                ];
+                dependsOn = [ "build-sidecars" ];
               };
               assemble-app = {
                 description = "Assemble sidecars into Lattice.app";

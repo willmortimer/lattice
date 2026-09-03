@@ -148,3 +148,16 @@ notify = { version = "8", default-features = false, features = ["macos_kqueue"] 
 notify-debouncer-full = { version = "0.7", default-features = false, features = [
     "macos_kqueue",
 ] }
+
+# Line tables for backtraces; skip full DWARF on crates.io deps. Full debuginfo:
+# cargo test --profile debugging
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.debugging]
+inherits = "dev"
+debug = true
+
