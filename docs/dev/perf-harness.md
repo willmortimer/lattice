@@ -157,8 +157,8 @@ Perf specs are Playwright-only via `test:perf` / `test:perf:tauri`.
 
 ## CI
 
-Browser harness is optional for `nix run .#check`. GitHub Actions runs it on
-push and pull requests to `main` via
+Browser harness is optional for `nix run .#check`. GitHub Actions runs it only
+on `v*` tags via
 [`.github/workflows/desktop-perf.yml`](../../.github/workflows/desktop-perf.yml):
 
 - **Runner:** `ubuntu-latest`

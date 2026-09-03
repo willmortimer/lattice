@@ -2,9 +2,8 @@ name: Desktop perf (browser)
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    tags:
+      - "v*"
 
 concurrency:
   group: desktop-perf-${{ github.workflow }}-${{ github.ref }}

@@ -1,9 +1,9 @@
 name: Client CI
 
 on:
-  pull_request:
   push:
-    branches: [main]
+    tags:
+      - "v*"
 
 concurrency:
   group: lattice-ci-${{ github.workflow }}-${{ github.ref }}
@@ -11,6 +11,12 @@ concurrency:
 
 env:
   NXR_AUTO_DAEMON: "0"
+  CI: "true"
+  # CI-only: do not infer this from CI=true inside flake apps.
+  CARGO_INCREMENTAL: "0"
+  RUSTC_WRAPPER: sccache
+  SCCACHE_DIR: ${{ github.workspace }}/.sccache
+  SCCACHE_CACHE_SIZE: 5G
 
 jobs:
   plan:
@@ -58,22 +64,7 @@ jobs:
             PLAN_ARGS+=(--base "$BASE")
           fi
           nix run .#nxr -- "${PLAN_ARGS[@]}" > /tmp/nxr-ci-plan.json
-          # Prefer execution_plan roots/leaves; fall back to full `ci` sink.
-          if command -v python3 >/dev/null; then
-            MATRIX="$(python3 - <<'PY'
-          import json
-          plan = json.load(open("/tmp/nxr-ci-plan.json"))
-          nodes = {n["id"] for n in plan.get("execution_plan", {}).get("nodes", [])}
-          preferred = ["fmt", "clippy", "test", "js-check", "js-deps"]
-          selected = [n for n in preferred if n in nodes]
-          if not selected:
-              selected = list(plan.get("roots") or ["ci"])
-          print(json.dumps({"include": [{"task": t} for t in selected]}, separators=(",", ":")))
-          PY
-          )"
-          else
-            MATRIX='{"include":[{"task":"ci"}]}'
-          fi
+          MATRIX="$(python3 ./scripts/ci-plan-to-matrix.py /tmp/nxr-ci-plan.json)"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "CI matrix: $MATRIX"
 
@@ -81,7 +72,7 @@ jobs:
     name: ${{ matrix.task }}
     needs: plan
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
@@ -111,6 +102,13 @@ jobs:
 
       - uses: DeterminateSystems/flakehub-cache-action@main
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            sccache-${{ runner.os }}-
 
       - name: Run leaf
         run: nix run .#nxr -- task "${{ matrix.task }}" -j 4

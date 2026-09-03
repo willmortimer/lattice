@@ -1,5 +1,5 @@
 # Optional macOS notarized DMG packaging stub.
-# Manual / tag-only so day-to-day PR CI never runs this job.
+# Tag-only (`v*`). Day-to-day validate is local NXR, not GitHub Actions.
 # When Apple secrets are unset, the job exits 0 (skip) so open-source forks
 # and repos without release credentials stay green.
 #
@@ -13,7 +13,6 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 concurrency:
   group: desktop-release-${{ github.workflow }}-${{ github.ref }}
