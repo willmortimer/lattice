@@ -1,12 +1,11 @@
 //! LatticeFS resource stat and cloud blob open for the governed HTTP/MCP API.
 
 use std::path::{Component, Path};
-use std::sync::OnceLock;
 
 use base64::Engine;
 use lattice_cloud_client::{
-    default_client, resolve_cloud_bearer, CloudSessionStore, HttpCloudBlobClient,
-    KeychainCloudSessionStore, MemoryCloudSessionStore,
+    default_client, process_cloud_session_store, resolve_cloud_bearer, CloudSessionStore,
+    HttpCloudBlobClient,
 };
 use latticefs_core::{
     open_cloud_authoritative_bytes, resource_stat, resource_stat_or_register, AuthorityMode,
@@ -17,25 +16,7 @@ use serde::Serialize;
 use crate::api::ApiError;
 
 fn session_store() -> &'static dyn CloudSessionStore {
-    static KEYCHAIN: OnceLock<KeychainCloudSessionStore> = OnceLock::new();
-    static MEMORY: OnceLock<MemoryCloudSessionStore> = OnceLock::new();
-    static USE_MEMORY: OnceLock<bool> = OnceLock::new();
-
-    let use_memory = *USE_MEMORY.get_or_init(|| {
-        let store = KeychainCloudSessionStore::new();
-        match store.save_token("probe") {
-            Ok(()) => {
-                let _ = store.clear_token();
-                false
-            }
-            Err(_) => true,
-        }
-    });
-    if use_memory {
-        MEMORY.get_or_init(MemoryCloudSessionStore::new)
-    } else {
-        KEYCHAIN.get_or_init(KeychainCloudSessionStore::new)
-    }
+    process_cloud_session_store()
 }
 
 fn validate_rel_path(rel_path: &str) -> Result<String, ApiError> {
@@ -65,19 +46,18 @@ fn map_fs_error(err: latticefs_core::Error) -> ApiError {
         latticefs_core::Error::ResourceNotFound { path } => {
             ApiError::NotFound(format!("resource not found at path: {path}"))
         }
-        latticefs_core::Error::OutsideWorkspace { path } => ApiError::BadRequest(format!(
-            "path escapes workspace: {}",
-            path.display()
-        )),
-        latticefs_core::Error::NotCloudAuthoritative { path } => ApiError::Forbidden(format!(
-            "resource is not cloud-authoritative: {path}"
-        )),
+        latticefs_core::Error::OutsideWorkspace { path } => {
+            ApiError::BadRequest(format!("path escapes workspace: {}", path.display()))
+        }
+        latticefs_core::Error::NotCloudAuthoritative { path } => {
+            ApiError::Forbidden(format!("resource is not cloud-authoritative: {path}"))
+        }
         latticefs_core::Error::CloudBlob { message } => {
             ApiError::Forbidden(format!("cloud blob error: {message}"))
         }
-        latticefs_core::Error::BlobNotFound { resource_id } => ApiError::NotFound(format!(
-            "blob not found for resource: {resource_id}"
-        )),
+        latticefs_core::Error::BlobNotFound { resource_id } => {
+            ApiError::NotFound(format!("blob not found for resource: {resource_id}"))
+        }
         other => ApiError::Internal(other.to_string()),
     }
 }
@@ -185,8 +165,7 @@ mod tests {
         let client = InMemoryCloudBlobClient::new();
         materialize_to_cloud(dir.path(), "notes/a.md", data, &client).unwrap();
         std::env::remove_var("LATTICE_CLOUD_TOKEN");
-        let err =
-            open_cloud_blob_with_session(dir.path(), "ws-test", "notes/a.md").unwrap_err();
+        let err = open_cloud_blob_with_session(dir.path(), "ws-test", "notes/a.md").unwrap_err();
         assert!(matches!(err, ApiError::Forbidden(_)));
     }
 }

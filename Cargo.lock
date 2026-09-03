@@ -6133,10 +6133,12 @@ dependencies = [
 name = "lattice-cloud-client"
 version = "0.1.0"
 dependencies = [
+ "dirs 6.0.0",
  "lattice-connectors",
  "latticefs-core",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "ureq",
 ]
@@ -6327,6 +6329,7 @@ dependencies = [
  "lattice-handlers",
  "lattice-index",
  "lattice-kernel",
+ "lattice-mcp-catalog",
  "lattice-profile",
  "lattice-protocol",
  "lattice-publish",
@@ -6512,6 +6515,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

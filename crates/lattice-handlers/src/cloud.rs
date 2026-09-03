@@ -2,28 +2,14 @@
 
 use std::sync::OnceLock;
 
-use lattice_connectors::probe_token_store_writable;
-
 use lattice_cloud_client::{
-    resolve_cloud_bearer, CloudApiClient, CloudSessionStatus, CloudSessionStore, HttpCloudClient,
-    KeychainCloudSessionStore, MemoryCloudSessionStore, PreferencesView, cloud_session_status,
-    default_client, sign_in, sign_in_with_apple, sign_in_with_desktop_handoff, sign_out,
-    CLOUD_PROBE_KEY, CLOUD_TOKEN_SERVICE,
+    cloud_session_status, default_client, process_cloud_session_store, resolve_cloud_bearer,
+    sign_in, sign_in_with_apple, sign_in_with_desktop_handoff, sign_out, CloudApiClient,
+    CloudSessionStatus, CloudSessionStore, HttpCloudClient, PreferencesView,
 };
 
 fn session_store() -> &'static dyn CloudSessionStore {
-    static KEYCHAIN: OnceLock<KeychainCloudSessionStore> = OnceLock::new();
-    static MEMORY: OnceLock<MemoryCloudSessionStore> = OnceLock::new();
-    static USE_MEMORY: OnceLock<bool> = OnceLock::new();
-
-    let use_memory = *USE_MEMORY.get_or_init(|| {
-        !probe_token_store_writable(CLOUD_TOKEN_SERVICE, CLOUD_PROBE_KEY)
-    });
-    if use_memory {
-        MEMORY.get_or_init(MemoryCloudSessionStore::new)
-    } else {
-        KEYCHAIN.get_or_init(KeychainCloudSessionStore::new)
-    }
+    process_cloud_session_store()
 }
 
 fn api_client() -> CloudApiClient<HttpCloudClient> {
@@ -44,13 +30,7 @@ pub fn resolve_cloud_bearer_cmd() -> Result<String, String> {
 }
 
 pub fn cloud_sign_in(email: String, password: String) -> Result<CloudSessionStatus, String> {
-    sign_in(
-        &api_client(),
-        session_store(),
-        email.trim(),
-        &password,
-    )
-    .map_err(map_err)
+    sign_in(&api_client(), session_store(), email.trim(), &password).map_err(map_err)
 }
 
 /// Native Sign in with Apple: obtain identity token on macOS, then mint a bearer session.
@@ -96,7 +76,9 @@ pub fn cloud_complete_desktop_handoff(
     state: Option<String>,
     error: Option<String>,
 ) -> Result<CloudSessionStatus, String> {
-    if let Some(message) = error.map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
+    if let Some(message) = error
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
     {
         let _ = take_pending_desktop_state();
         return Err(message);
@@ -180,11 +162,7 @@ pub fn product_telemetry_emit(
     let install_id = load_or_create_install_id()?;
     let bearer = session_store().load_token().ok().flatten();
     let props = sanitize_telemetry_properties(properties);
-    let _ = api_client().post_telemetry_events(
-        bearer.as_deref(),
-        &install_id,
-        &[(name, props)],
-    );
+    let _ = api_client().post_telemetry_events(bearer.as_deref(), &install_id, &[(name, props)]);
     Ok(())
 }
 
@@ -195,19 +173,31 @@ fn sanitize_telemetry_properties(
         return None;
     };
     let forbidden = [
-        "path", "paths", "prompt", "prompts", "excerpt", "excerpts", "filename", "filenames",
-        "content", "body", "text", "message", "messages",
+        "path",
+        "paths",
+        "prompt",
+        "prompts",
+        "excerpt",
+        "excerpts",
+        "filename",
+        "filenames",
+        "content",
+        "body",
+        "text",
+        "message",
+        "messages",
     ];
     let mut out = serde_json::Map::new();
     for (key, value) in map {
         let normalized = key.to_ascii_lowercase();
-        if forbidden.iter().any(|item| normalized == *item || normalized.contains(item)) {
+        if forbidden
+            .iter()
+            .any(|item| normalized == *item || normalized.contains(item))
+        {
             continue;
         }
         match value {
-            serde_json::Value::Null
-            | serde_json::Value::Bool(_)
-            | serde_json::Value::Number(_) => {
+            serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {
                 out.insert(key, value);
             }
             serde_json::Value::String(ref s) if s.len() <= 64 => {
@@ -234,7 +224,9 @@ fn load_or_create_install_id() -> Result<String, String> {
         return Ok(id.clone());
     }
     let home = std::env::var("HOME").map_err(|_| "HOME unset".to_string())?;
-    let path = std::path::PathBuf::from(home).join(".lattice").join("install_id");
+    let path = std::path::PathBuf::from(home)
+        .join(".lattice")
+        .join("install_id");
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
@@ -269,8 +261,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use lattice_cloud_client::{
-        CloudApiClient, CloudHttpClient, CloudHttpResponse, CloudError, MemoryCloudSessionStore,
-        cloud_session_status, sign_in, sign_out,
+        cloud_session_status, sign_in, sign_out, CloudApiClient, CloudError, CloudHttpClient,
+        CloudHttpResponse, MemoryCloudSessionStore,
     };
 
     #[derive(Default, Clone)]
@@ -378,7 +370,10 @@ mod tests {
         let signed_in = sign_in(&client, &store, "alice@example.com", "secret").unwrap();
         assert!(signed_in.signed_in);
         let status = cloud_session_status(&client, &store).unwrap();
-        assert_eq!(status.user.as_ref().map(|user| user.email.as_deref()), Some(Some("alice@example.com")));
+        assert_eq!(
+            status.user.as_ref().map(|user| user.email.as_deref()),
+            Some(Some("alice@example.com"))
+        );
         let signed_out = sign_out(&client, &store).unwrap();
         assert!(!signed_out.signed_in);
     }

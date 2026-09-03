@@ -1,37 +1,23 @@
 //! Authoritative resource bytes: local disk or cloud GET (no silent fallback).
 
-use lattice_connectors::probe_token_store_writable;
 use lattice_cloud_client::{
-    default_client, HttpCloudBlobClient, KeychainCloudSessionStore, MemoryCloudSessionStore,
-    resolve_cloud_bearer, CloudSessionStore, CLOUD_PROBE_KEY, CLOUD_TOKEN_SERVICE,
+    default_client, process_cloud_session_store, resolve_cloud_bearer, CloudSessionStore,
+    HttpCloudBlobClient,
 };
-use latticefs_core::{
-    open_cloud_authoritative_bytes, resource_stat_or_register, AuthorityMode,
-};
-use std::sync::OnceLock;
+use latticefs_core::{open_cloud_authoritative_bytes, resource_stat_or_register, AuthorityMode};
 
 use crate::path::resolve_within_root;
 
 fn session_store() -> &'static dyn CloudSessionStore {
-    static KEYCHAIN: OnceLock<KeychainCloudSessionStore> = OnceLock::new();
-    static MEMORY: OnceLock<MemoryCloudSessionStore> = OnceLock::new();
-    static USE_MEMORY: OnceLock<bool> = OnceLock::new();
-
-    let use_memory = *USE_MEMORY.get_or_init(|| {
-        !probe_token_store_writable(CLOUD_TOKEN_SERVICE, CLOUD_PROBE_KEY)
-    });
-    if use_memory {
-        MEMORY.get_or_init(MemoryCloudSessionStore::new)
-    } else {
-        KEYCHAIN.get_or_init(KeychainCloudSessionStore::new)
-    }
+    process_cloud_session_store()
 }
 
 /// Read bytes for a workspace path. Cloud authority uses GET only (never local disk).
 pub fn read_authoritative_bytes(root: &str, rel_path: &str) -> Result<Vec<u8>, String> {
     let (canonical_root, canonical_candidate) = resolve_within_root(root, rel_path)?;
     let rel_key = rel_path.replace('\\', "/");
-    let stat = resource_stat_or_register(&canonical_root, &rel_key).map_err(|err| err.to_string())?;
+    let stat =
+        resource_stat_or_register(&canonical_root, &rel_key).map_err(|err| err.to_string())?;
     if stat.authority == AuthorityMode::Cloud {
         let token = resolve_cloud_bearer(session_store()).map_err(|err| err.to_string())?;
         let client = HttpCloudBlobClient::new(default_client(), token);
@@ -51,7 +37,7 @@ pub fn read_authoritative_string(root: &str, rel_path: &str) -> Result<String, S
 mod tests {
     use super::*;
     use latticefs_core::{
-        ContentHash, InMemoryCloudBlobClient, NamespaceRegistry, roundtrip_verify_blob,
+        roundtrip_verify_blob, ContentHash, InMemoryCloudBlobClient, NamespaceRegistry,
     };
     use tempfile::tempdir;
 

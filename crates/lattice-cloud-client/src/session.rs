@@ -1,6 +1,9 @@
-use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use lattice_connectors::{production_token_store, TokenMaterial, TokenStore};
+use lattice_connectors::{
+    probe_token_store_writable, production_token_store, TokenMaterial, TokenStore,
+};
 
 use crate::client::{CloudApiClient, CloudHttpClient};
 use crate::config::cloud_url;
@@ -13,6 +16,11 @@ pub const CLOUD_TOKEN_SERVICE: &str = "lattice.cloud";
 pub const CLOUD_USER_TOKEN_KEY: &str = "lattice.cloud.user";
 /// Ephemeral probe account; must not overlap [`CLOUD_USER_TOKEN_KEY`].
 pub const CLOUD_PROBE_KEY: &str = "lattice.cloud.probe";
+/// Optional absolute path to the shared owner-local session file.
+pub const CLOUD_SESSION_FILE_ENV: &str = "LATTICE_CLOUD_SESSION_FILE";
+const SESSION_FILE_NAME: &str = "cloud-session";
+const PROD_LATTICE_HOME_NAME: &str = "Lattice";
+const DEBUG_HOME_RELATIVE: &str = "target/dev-home";
 
 pub trait CloudSessionStore: Send + Sync {
     fn load_token(&self) -> Result<Option<String>>;
@@ -67,31 +75,224 @@ impl Default for KeychainCloudSessionStore {
 
 impl CloudSessionStore for KeychainCloudSessionStore {
     fn load_token(&self) -> Result<Option<String>> {
-        self.store
-            .get(CLOUD_USER_TOKEN_KEY)
-            .map(|material| material.map(|token| token.access_token))
-            .map_err(|err| CloudError::Credentials(err.to_string()))
+        match self.store.get(CLOUD_USER_TOKEN_KEY) {
+            Ok(Some(token)) => Ok(Some(token.access_token)),
+            Ok(None) => Ok(load_shared_session_file()),
+            Err(_) => Ok(load_shared_session_file()),
+        }
     }
 
     fn save_token(&self, token: &str) -> Result<()> {
-        self.store
-            .set(
-                CLOUD_USER_TOKEN_KEY,
-                &TokenMaterial {
-                    access_token: token.to_string(),
-                    refresh_token: None,
-                    expires_in: None,
-                    token_type: Some("bearer".into()),
-                },
-            )
-            .map_err(|err| CloudError::Credentials(err.to_string()))
+        let keychain = self.store.set(
+            CLOUD_USER_TOKEN_KEY,
+            &TokenMaterial {
+                access_token: token.to_string(),
+                refresh_token: None,
+                expires_in: None,
+                token_type: Some("bearer".into()),
+            },
+        );
+        let file = save_shared_session_file(token);
+        match (keychain, file) {
+            (Ok(()), _) | (Err(_), Ok(())) => Ok(()),
+            (Err(err), Err(_)) => Err(CloudError::Credentials(err.to_string())),
+        }
     }
 
     fn clear_token(&self) -> Result<()> {
-        self.store
+        let keychain = self
+            .store
             .delete(CLOUD_USER_TOKEN_KEY)
-            .map_err(|err| CloudError::Credentials(err.to_string()))
+            .map_err(|err| CloudError::Credentials(err.to_string()));
+        let file = clear_shared_session_file();
+        keychain.or(file)
     }
+}
+
+/// Owner-local session file so unsigned `latticed mcp` can use the desktop sign-in.
+///
+/// Keychain ACL often blocks debug binaries from reading tokens written by
+/// Lattice.app. The file lives under Lattice home `State/` (mode 0600 on Unix).
+#[derive(Debug, Default, Clone)]
+pub struct FileCloudSessionStore;
+
+impl CloudSessionStore for FileCloudSessionStore {
+    fn load_token(&self) -> Result<Option<String>> {
+        Ok(load_shared_session_file())
+    }
+
+    fn save_token(&self, token: &str) -> Result<()> {
+        save_shared_session_file(token)
+    }
+
+    fn clear_token(&self) -> Result<()> {
+        clear_shared_session_file()
+    }
+}
+
+/// Process-wide store: keychain when writable, otherwise the shared session file.
+///
+/// Prefer this over a process-local memory store so Cursor's stdio `latticed mcp`
+/// can read a session saved by the desktop app.
+pub fn process_cloud_session_store() -> &'static dyn CloudSessionStore {
+    static KEYCHAIN: OnceLock<KeychainCloudSessionStore> = OnceLock::new();
+    static FILE: OnceLock<FileCloudSessionStore> = OnceLock::new();
+    static USE_FILE: OnceLock<bool> = OnceLock::new();
+
+    let use_file =
+        *USE_FILE.get_or_init(|| !probe_token_store_writable(CLOUD_TOKEN_SERVICE, CLOUD_PROBE_KEY));
+    if use_file {
+        FILE.get_or_init(FileCloudSessionStore::default)
+    } else {
+        KEYCHAIN.get_or_init(KeychainCloudSessionStore::new)
+    }
+}
+
+fn user_profile_dir() -> Option<PathBuf> {
+    dirs::home_dir().or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
+}
+
+fn session_file_under(home: &Path) -> PathBuf {
+    home.join("State").join(SESSION_FILE_NAME)
+}
+
+/// Paths that may hold the owner session, in search order.
+pub fn shared_session_file_candidates() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if let Ok(override_path) = std::env::var(CLOUD_SESSION_FILE_ENV) {
+        let trimmed = override_path.trim();
+        if !trimmed.is_empty() {
+            paths.push(PathBuf::from(trimmed));
+        }
+    }
+    for env_name in ["LATTICE_HOME", "LATTICE_DEV_HOME"] {
+        if let Ok(raw) = std::env::var(env_name) {
+            let trimmed = raw.trim();
+            if !trimmed.is_empty() {
+                paths.push(session_file_under(Path::new(trimmed)));
+            }
+        }
+    }
+    if let Some(profile) = user_profile_dir() {
+        paths.push(session_file_under(&profile.join(PROD_LATTICE_HOME_NAME)));
+    }
+    if cfg!(debug_assertions) {
+        if let Ok(cwd) = std::env::current_dir() {
+            paths.push(session_file_under(&cwd.join(DEBUG_HOME_RELATIVE)));
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+fn load_shared_session_file() -> Option<String> {
+    let paths = if let Ok(override_path) = std::env::var(CLOUD_SESSION_FILE_ENV) {
+        let trimmed = override_path.trim();
+        if trimmed.is_empty() {
+            shared_session_file_candidates()
+        } else {
+            vec![PathBuf::from(trimmed)]
+        }
+    } else {
+        shared_session_file_candidates()
+    };
+    for path in paths {
+        let Ok(raw) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let token = raw.trim();
+        if token.is_empty() || token.contains('\n') || token.len() > 16_384 {
+            continue;
+        }
+        return Some(token.to_string());
+    }
+    None
+}
+
+fn save_paths_for_write() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if let Ok(override_path) = std::env::var(CLOUD_SESSION_FILE_ENV) {
+        let trimmed = override_path.trim();
+        if !trimmed.is_empty() {
+            paths.push(PathBuf::from(trimmed));
+            return paths;
+        }
+    }
+    for env_name in ["LATTICE_HOME", "LATTICE_DEV_HOME"] {
+        if let Ok(raw) = std::env::var(env_name) {
+            let trimmed = raw.trim();
+            if !trimmed.is_empty() {
+                paths.push(session_file_under(Path::new(trimmed)));
+            }
+        }
+    }
+    if let Some(profile) = user_profile_dir() {
+        paths.push(session_file_under(&profile.join(PROD_LATTICE_HOME_NAME)));
+    }
+    if cfg!(debug_assertions) {
+        if let Ok(cwd) = std::env::current_dir() {
+            paths.push(session_file_under(&cwd.join(DEBUG_HOME_RELATIVE)));
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+fn write_session_file(path: &Path, token: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|err| {
+            CloudError::Credentials(format!("cloud session file {path:?}: {err}"))
+        })?;
+    }
+    std::fs::write(path, token)
+        .map_err(|err| CloudError::Credentials(format!("cloud session file {path:?}: {err}")))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+fn save_shared_session_file(token: &str) -> Result<()> {
+    let paths = save_paths_for_write();
+    if paths.is_empty() {
+        return Err(CloudError::Credentials(
+            "could not determine a Lattice home for the cloud session file".into(),
+        ));
+    }
+    let mut last_err = None;
+    let mut wrote = false;
+    for path in paths {
+        match write_session_file(&path, token) {
+            Ok(()) => wrote = true,
+            Err(err) => last_err = Some(err),
+        }
+    }
+    if wrote {
+        Ok(())
+    } else {
+        Err(last_err.unwrap_or_else(|| {
+            CloudError::Credentials("could not write cloud session file".into())
+        }))
+    }
+}
+
+fn clear_shared_session_file() -> Result<()> {
+    for path in save_paths_for_write() {
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(CloudError::Credentials(format!(
+                    "cloud session file {path:?}: {err}"
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn cloud_session_status<C: CloudHttpClient>(
@@ -177,12 +378,16 @@ pub fn sign_in_with_desktop_handoff<C: CloudHttpClient>(
     ))
 }
 
-/// Bearer for cloud API calls: `LATTICE_CLOUD_TOKEN` wins, else keychain/session store.
+/// Bearer for cloud API calls: `LATTICE_CLOUD_TOKEN` wins, else the given store
+/// (keychain and/or owner-local session file).
 pub fn resolve_cloud_bearer(store: &dyn CloudSessionStore) -> Result<String> {
     if let Some(token) = crate::config::cloud_token_from_env() {
         return Ok(token);
     }
-    store.load_token()?.ok_or_else(|| {
+    if let Some(token) = store.load_token()? {
+        return Ok(token);
+    }
+    load_shared_session_file().ok_or_else(|| {
         CloudError::Credentials(
             "not signed in to cloud; sign in via desktop Settings → Cloud account, \
              or set LATTICE_CLOUD_TOKEN"
@@ -288,7 +493,25 @@ mod tests {
         store.save_token("bearer-token").unwrap();
         let status = cloud_session_status(&client, &store).unwrap();
         assert!(status.signed_in);
-        assert!(status.error.as_deref().unwrap_or("").contains("could not refresh"));
+        assert!(status
+            .error
+            .as_deref()
+            .unwrap_or("")
+            .contains("could not refresh"));
         assert_eq!(store.load_token().unwrap().as_deref(), Some("bearer-token"));
+    }
+
+    #[test]
+    fn file_store_round_trip_via_env_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cloud-session");
+        std::env::set_var(CLOUD_SESSION_FILE_ENV, &path);
+        let store = FileCloudSessionStore;
+        store.save_token("file-token").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap().trim(), "file-token");
+        assert_eq!(store.load_token().unwrap().as_deref(), Some("file-token"));
+        store.clear_token().unwrap();
+        assert!(store.load_token().unwrap().is_none());
+        std::env::remove_var(CLOUD_SESSION_FILE_ENV);
     }
 }

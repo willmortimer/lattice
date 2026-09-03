@@ -24,9 +24,11 @@ pub use openai_key::{
     OPENAI_KEY_SERVICE,
 };
 pub use session::{
-    cloud_session_status, resolve_cloud_bearer, resolved_cloud_url, sign_in, sign_in_with_apple,
-    sign_in_with_desktop_handoff, sign_out, CloudSessionStore, KeychainCloudSessionStore,
-    MemoryCloudSessionStore, CLOUD_PROBE_KEY, CLOUD_TOKEN_SERVICE, CLOUD_USER_TOKEN_KEY,
+    cloud_session_status, process_cloud_session_store, resolve_cloud_bearer, resolved_cloud_url,
+    shared_session_file_candidates, sign_in, sign_in_with_apple, sign_in_with_desktop_handoff,
+    sign_out, CloudSessionStore, FileCloudSessionStore, KeychainCloudSessionStore,
+    MemoryCloudSessionStore, CLOUD_PROBE_KEY, CLOUD_SESSION_FILE_ENV, CLOUD_TOKEN_SERVICE,
+    CLOUD_USER_TOKEN_KEY,
 };
 pub use types::{
     AiAccess, AuthTokenResponse, BackupMetadataResponse, BackupWrapKeyResponse, CloudSessionStatus,
