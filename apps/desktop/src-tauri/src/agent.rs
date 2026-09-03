@@ -760,6 +760,25 @@ mod tests {
         let _lock = env_lock()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        // Isolate from developer LATTICE_DEV_HOME / keychain / Account session.
+        // Fake-without-keys applies to Account mode only (Local/BYO must not fake).
+        let home = tempfile::tempdir().unwrap();
+        let settings_dir = home.path().join("Settings");
+        std::fs::create_dir_all(&settings_dir).unwrap();
+        std::fs::write(
+            settings_dir.join("desktop.yaml"),
+            "format: lattice-desktop-settings\nversion: 1\nai:\n  mode: account\n",
+        )
+        .unwrap();
+        let home_str = home.path().to_str().expect("utf8 temp home");
+        let session_path = home.path().join("missing-cloud-session");
+        let _dev_home = EnvGuard::set("LATTICE_DEV_HOME", Some(home_str));
+        let _lattice_home = EnvGuard::set("LATTICE_HOME", Some(home_str));
+        let _session = EnvGuard::set(
+            "LATTICE_CLOUD_SESSION_FILE",
+            Some(session_path.to_str().expect("utf8 session path")),
+        );
+        let _cloud_token = EnvGuard::set("LATTICE_CLOUD_TOKEN", None);
         let _guard = EnvGuard::set(ENV_PIONEER_API_KEY, None);
         let _openai = EnvGuard::set(ENV_OPENAI_API_KEY, None);
         let _fake_guard = EnvGuard::set(ENV_AGENT_FAKE, None);

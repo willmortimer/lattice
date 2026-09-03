@@ -26,8 +26,7 @@ async fn idle_shutdown_exits_after_last_client_disconnects() {
     let opts = SpawnOptions::new(env!("CARGO_BIN_EXE_latticed"), &socket, "idle-token")
         .with_instance_id("idle-exit")
         .with_keep_services_running(false)
-        .with_idle_shutdown_secs(1)
-        .with_ready_timeout(Duration::from_secs(10));
+        .with_idle_shutdown_secs(1);
 
     let mut spawned = spawn_latticed(opts).await.expect("spawn latticed");
     let client = DaemonClient::connect(&spawned.socket_path, &spawned.auth_token)
@@ -59,8 +58,7 @@ async fn keep_running_stays_up_after_client_disconnects() {
     let opts = SpawnOptions::new(env!("CARGO_BIN_EXE_latticed"), &socket, "keep-token")
         .with_instance_id("keep-up")
         .with_keep_services_running(true)
-        .with_idle_shutdown_secs(1)
-        .with_ready_timeout(Duration::from_secs(10));
+        .with_idle_shutdown_secs(1);
 
     let mut spawned = spawn_latticed(opts).await.expect("spawn latticed");
     let client = DaemonClient::connect(&spawned.socket_path, &spawned.auth_token)
@@ -165,8 +163,7 @@ async fn idle_shutdown_respects_configured_timeout() {
     )
     .with_instance_id("idle-bounded")
     .with_keep_services_running(false)
-    .with_idle_shutdown_secs(idle_secs)
-    .with_ready_timeout(Duration::from_secs(10));
+    .with_idle_shutdown_secs(idle_secs);
 
     let mut spawned = spawn_latticed(opts).await.expect("spawn latticed");
     let client = DaemonClient::connect(&spawned.socket_path, &spawned.auth_token)

@@ -9,7 +9,7 @@ use tokio::time::{sleep, Instant};
 
 use crate::embed_host::ENV_SEMANTIC_FAKE;
 use crate::error::{Error, Result};
-use crate::preferences::DaemonPreferences;
+use crate::preferences::{DaemonPreferences, LATTICE_KEEP_SERVICES_RUNNING_ENV};
 
 /// Options for spawning a `latticed` child process.
 #[derive(Debug, Clone)]
@@ -165,6 +165,12 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
         // Isolate from interactive Lattice.app embed-host socket contention.
         cmd.env(ENV_SEMANTIC_FAKE, "1");
     }
+    // Child ORs `--keep-services-running` with profile prefs. Pin the test
+    // override so a developer desktop.yaml cannot keep spawned helpers alive.
+    cmd.env(
+        LATTICE_KEEP_SERVICES_RUNNING_ENV,
+        if keep_services_running { "1" } else { "0" },
+    );
     if keep_services_running {
         cmd.arg("--keep-services-running");
     } else {

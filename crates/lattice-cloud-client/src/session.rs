@@ -378,22 +378,35 @@ pub fn sign_in_with_desktop_handoff<C: CloudHttpClient>(
     ))
 }
 
+fn unsigned_cloud_error() -> CloudError {
+    CloudError::Credentials(
+        "not signed in to cloud; sign in via desktop Settings → Cloud account, \
+         or set LATTICE_CLOUD_TOKEN"
+            .into(),
+    )
+}
+
 /// Bearer for cloud API calls: `LATTICE_CLOUD_TOKEN` wins, else the given store
 /// (keychain and/or owner-local session file).
+///
+/// A non-empty [`CLOUD_SESSION_FILE_ENV`] is exclusive of keychain/default
+/// homes so tests and winbuild can isolate a developer machine's signed-in
+/// session.
 pub fn resolve_cloud_bearer(store: &dyn CloudSessionStore) -> Result<String> {
     if let Some(token) = crate::config::cloud_token_from_env() {
         return Ok(token);
     }
+    let session_file_override = std::env::var(CLOUD_SESSION_FILE_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if session_file_override.is_some() {
+        return load_shared_session_file().ok_or_else(unsigned_cloud_error);
+    }
     if let Some(token) = store.load_token()? {
         return Ok(token);
     }
-    load_shared_session_file().ok_or_else(|| {
-        CloudError::Credentials(
-            "not signed in to cloud; sign in via desktop Settings → Cloud account, \
-             or set LATTICE_CLOUD_TOKEN"
-                .into(),
-        )
-    })
+    load_shared_session_file().ok_or_else(unsigned_cloud_error)
 }
 
 pub fn sign_out<C: CloudHttpClient>(
@@ -499,6 +512,22 @@ mod tests {
             .unwrap_or("")
             .contains("could not refresh"));
         assert_eq!(store.load_token().unwrap().as_deref(), Some("bearer-token"));
+    }
+
+    #[test]
+    fn session_file_override_skips_store_when_unsigned() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("missing-cloud-session");
+        let store = MemoryCloudSessionStore::new();
+        store.save_token("keychain-token").unwrap();
+        std::env::remove_var(crate::config::CLOUD_TOKEN_ENV);
+        std::env::set_var(CLOUD_SESSION_FILE_ENV, &path);
+        let err = resolve_cloud_bearer(&store).unwrap_err();
+        std::env::remove_var(CLOUD_SESSION_FILE_ENV);
+        assert!(
+            err.to_string().contains("not signed in to cloud"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

@@ -133,35 +133,24 @@ impl KernelSession {
     }
 
     fn wait_for_ready(&self, ready_rx: Receiver<BridgeResponse>) -> Result<(), KernelError> {
-        let deadline = std::time::Instant::now() + READY_TIMEOUT;
-        loop {
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            if remaining.is_zero() {
-                return Err(KernelError::Timeout);
+        match ready_rx.recv_timeout(READY_TIMEOUT) {
+            Ok(BridgeResponse::Ready) => {
+                let mut map = self
+                    .inner
+                    .waiters
+                    .lock()
+                    .map_err(|_| KernelError::DeadSession)?;
+                map.remove("__ready__");
+                Ok(())
             }
-            match ready_rx.recv_timeout(remaining) {
-                Ok(BridgeResponse::Ready) => {
-                    let mut map = self
-                        .inner
-                        .waiters
-                        .lock()
-                        .map_err(|_| KernelError::DeadSession)?;
-                    map.remove("__ready__");
-                    return Ok(());
-                }
-                Ok(BridgeResponse::BridgeError { message, .. }) => {
-                    return Err(KernelError::spawn(message));
-                }
-                Ok(other) => {
-                    return Err(KernelError::protocol(format!(
-                        "expected ready, got {other:?}"
-                    )));
-                }
-                Err(RecvTimeoutError::Timeout) => return Err(KernelError::Timeout),
-                Err(RecvTimeoutError::Disconnected) => {
-                    self.inner.alive.store(false, Ordering::SeqCst);
-                    return Err(KernelError::DeadSession);
-                }
+            Ok(BridgeResponse::BridgeError { message, .. }) => Err(KernelError::spawn(message)),
+            Ok(other) => Err(KernelError::protocol(format!(
+                "expected ready, got {other:?}"
+            ))),
+            Err(RecvTimeoutError::Timeout) => Err(KernelError::Timeout),
+            Err(RecvTimeoutError::Disconnected) => {
+                self.inner.alive.store(false, Ordering::SeqCst);
+                Err(KernelError::DeadSession)
             }
         }
     }

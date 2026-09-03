@@ -110,6 +110,10 @@ fn cloud_blob_open_fails_closed_for_local_authority() {
 fn cloud_blob_open_fails_closed_without_cloud_session() {
     std::env::remove_var("LATTICE_CLOUD_TOKEN");
     let dir = TempDir::new().expect("tempdir");
+    std::env::set_var(
+        lattice_cloud_client::CLOUD_SESSION_FILE_ENV,
+        dir.path().join("no-cloud-session"),
+    );
     Workspace::init(dir.path(), "HTTP Resource").expect("init");
     std::fs::create_dir_all(dir.path().join("notes")).expect("mkdir");
     std::fs::write(dir.path().join("notes/cloud.md"), b"cloud bytes").expect("write");
@@ -124,4 +128,5 @@ fn cloud_blob_open_fails_closed_without_cloud_session() {
         err.to_string().contains("not signed in to cloud"),
         "unexpected error: {err}"
     );
+    std::env::remove_var(lattice_cloud_client::CLOUD_SESSION_FILE_ENV);
 }

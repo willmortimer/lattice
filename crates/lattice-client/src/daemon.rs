@@ -24,8 +24,9 @@ use lattice_protocol::{
     encode_frame, envelope, event, request_envelope, Event, FrameDecoder, Request, Response,
     PROTOCOL_VERSION,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
+use tokio::task::JoinHandle;
 
 use crate::client::LatticeClient;
 use crate::error::ClientError;
@@ -35,15 +36,25 @@ use crate::handshake::{
 };
 use crate::transport::{self, DaemonStream};
 
+#[cfg(unix)]
+type IpcReader = tokio::net::unix::OwnedReadHalf;
+#[cfg(unix)]
+type IpcWriter = tokio::net::unix::OwnedWriteHalf;
+#[cfg(windows)]
+type IpcReader = tokio::io::ReadHalf<DaemonStream>;
+#[cfg(windows)]
+type IpcWriter = tokio::io::WriteHalf<DaemonStream>;
+
 /// Client connected to a private daemon IPC endpoint.
 pub struct DaemonClient {
     socket_path: PathBuf,
     instance_id: String,
-    writer: Mutex<WriteHalf<DaemonStream>>,
+    writer: Mutex<IpcWriter>,
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, ClientError>>>>>,
     event_tx: broadcast::Sender<Event>,
     agent_event_tx: broadcast::Sender<Event>,
     next_request_id: AtomicU64,
+    reader_task: JoinHandle<()>,
 }
 
 impl DaemonClient {
@@ -58,7 +69,7 @@ impl DaemonClient {
         let socket_path = socket_path.as_ref().to_path_buf();
         let mut stream = transport::connect(&socket_path).await?;
         let instance_id = perform_handshake(&mut stream, auth_token.into()).await?;
-        let (reader, writer) = tokio::io::split(stream);
+        let (reader, writer) = split_daemon_stream(stream);
 
         let pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, ClientError>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
@@ -66,7 +77,7 @@ impl DaemonClient {
         let (event_tx, _) = broadcast::channel(8192);
         // Agent bus stays quiet so tool-output chunks are not Lagged away.
         let (agent_event_tx, _) = broadcast::channel(1024);
-        spawn_reader(
+        let reader_task = spawn_reader(
             reader,
             Arc::clone(&pending),
             event_tx.clone(),
@@ -81,6 +92,7 @@ impl DaemonClient {
             event_tx,
             agent_event_tx,
             next_request_id: AtomicU64::new(1),
+            reader_task,
         })
     }
 
@@ -100,12 +112,36 @@ impl DaemonClient {
     }
 }
 
+impl Drop for DaemonClient {
+    fn drop(&mut self) {
+        // Abort the reader so both IPC halves can drop. On Unix, OwnedWriteHalf
+        // already shuts down the socket; aborting avoids a leaked task.
+        self.reader_task.abort();
+    }
+}
+
+/// Split the connected stream so dropping the write half is visible to latticed.
+///
+/// `tokio::io::split` keeps the underlying socket alive until **both** halves
+/// drop. The reader task would then leak the connection after `DaemonClient`
+/// is dropped, so idle shutdown never saw "last client disconnected".
+fn split_daemon_stream(stream: DaemonStream) -> (IpcReader, IpcWriter) {
+    #[cfg(unix)]
+    {
+        stream.into_split()
+    }
+    #[cfg(windows)]
+    {
+        tokio::io::split(stream)
+    }
+}
+
 fn spawn_reader(
-    mut reader: ReadHalf<DaemonStream>,
+    mut reader: IpcReader,
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, ClientError>>>>>,
     event_tx: broadcast::Sender<Event>,
     agent_event_tx: broadcast::Sender<Event>,
-) {
+) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut read_buf = BytesMut::new();
         let mut decoder = FrameDecoder::new();
@@ -147,7 +183,7 @@ fn spawn_reader(
                 Some(envelope::Payload::Request(_)) | None => {}
             }
         }
-    });
+    })
 }
 
 async fn read_envelope<R: AsyncRead + Unpin>(

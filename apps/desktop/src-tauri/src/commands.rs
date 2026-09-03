@@ -1024,7 +1024,13 @@ mod tests {
         .unwrap();
 
         assert!(after.capabilities.iter().any(|c| c == "terminal"));
-        let reopened = open_workspace(root).unwrap();
+        // Read the manifest from disk. Process-default runtime sessions keep the
+        // pre-update Workspace in memory, so a second open_workspace would not
+        // prove persistence.
+        let reopened = snapshot_from_workspace(
+            &Workspace::open(Path::new(&root)).expect("reopen workspace"),
+        )
+        .expect("snapshot");
         assert!(reopened.capabilities.iter().any(|c| c == "terminal"));
     }
 }

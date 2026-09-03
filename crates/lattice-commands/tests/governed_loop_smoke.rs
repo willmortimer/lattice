@@ -314,9 +314,16 @@ fn governed_loop_smoke_demo_template() {
     );
     assert_eq!(history_transaction_count(root), history_before_apply + 1);
     let apply_tx = latest_history_id(root);
+    // apply_proposal archives in place (Accepted); it does not delete the JSON.
+    let archived = load_proposal(root, &proposal_id).expect("archived proposal");
+    assert_eq!(archived.status, ProposalStatus::Accepted);
+    assert_eq!(
+        archived.applied_transaction_id.as_deref(),
+        Some(apply_tx.as_str())
+    );
     assert!(
-        !root.join(".lattice/proposals").join(format!("{proposal_id}.json")).is_file(),
-        "proposal file should be dismissed after apply"
+        proposal_path.is_file(),
+        "accepted proposal stays archived on disk"
     );
     log_boundary(
         "proposal-apply",

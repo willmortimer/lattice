@@ -1093,9 +1093,23 @@ fn current_time_ms() -> i64 {
 /// [`WorkspaceIndex::hybrid_search`]) use this helper. Async callers should
 /// prefer [`WorkspaceIndex::embed_pending_chunks_async`] /
 /// [`WorkspaceIndex::hybrid_search_async`] and await the provider directly.
-fn block_on_embed<F, T>(future: F) -> Result<T>
+fn drive_embed_runtime<F, T>(future: F) -> Result<T>
 where
     F: std::future::Future<Output = Result<T>>,
+{
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| {
+            Error::Embedding(lattice_embedding::EmbeddingError::provider(err.to_string()))
+        })?
+        .block_on(future)
+}
+
+fn block_on_embed<F, T>(future: F) -> Result<T>
+where
+    F: std::future::Future<Output = Result<T>> + Send,
+    T: Send,
 {
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
         match handle.runtime_flavor() {
@@ -1104,21 +1118,26 @@ where
                 return tokio::task::block_in_place(|| handle.block_on(future));
             }
             _ => {
-                // current_thread ambient runtime (e.g. some axum tests): nesting
-                // Tokio block_on/block_in_place panics. Drive with a non-Tokio
-                // executor — Fine for Fake providers; host IO always uses
-                // multi-thread + Handle::enter on the semantic worker.
-                return futures_executor::block_on(future);
+                // current_thread ambient runtime (axum / #[tokio::test]):
+                // nesting Tokio block_on panics, and a non-Tokio executor has no
+                // IO driver so Lance open parks forever. Drive on a dedicated
+                // thread with its own runtime.
+                return std::thread::scope(|scope| {
+                    scope
+                        .spawn(|| drive_embed_runtime(future))
+                        .join()
+                        .unwrap_or_else(|_| {
+                            Err(Error::Embedding(
+                                lattice_embedding::EmbeddingError::provider(
+                                    "embed worker thread panicked",
+                                ),
+                            ))
+                        })
+                });
             }
         }
     }
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|err| {
-            Error::Embedding(lattice_embedding::EmbeddingError::provider(err.to_string()))
-        })?
-        .block_on(future)
+    drive_embed_runtime(future)
 }
 
 /// Thin compatibility hook for page writes.
@@ -1153,6 +1172,14 @@ mod tests {
             "See [other](./Other.md#body) for details.\n",
         )
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn open_from_current_thread_runtime_does_not_deadlock() {
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        assert!(index.resource_count().is_ok());
     }
 
     #[test]

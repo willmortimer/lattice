@@ -19,7 +19,7 @@ hex.workspace = true
 thiserror.workspace = true
 walkdir.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
-futures-executor = "0.3"
+
 
 [dev-dependencies]
 lattice-embed-host.workspace = true

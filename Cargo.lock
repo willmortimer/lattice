@@ -6466,7 +6466,6 @@ dependencies = [
 name = "lattice-index"
 version = "0.1.0"
 dependencies = [
- "futures-executor",
  "hex",
  "lattice-core",
  "lattice-embed-host",

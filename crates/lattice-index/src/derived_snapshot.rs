@@ -114,9 +114,22 @@ pub(crate) fn is_vector_index_stale(
     Ok(lance_count != ready_count)
 }
 
-fn block_on_snapshot<F, T>(future: F) -> Result<T>
+fn drive_snapshot_runtime<F, T>(future: F) -> Result<T>
 where
     F: std::future::Future<Output = std::result::Result<T, VectorIndexError>>,
+{
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| Error::Vector(VectorIndexError::Lance(err.to_string())))?
+        .block_on(future)
+        .map_err(Error::from)
+}
+
+fn block_on_snapshot<F, T>(future: F) -> Result<T>
+where
+    F: std::future::Future<Output = std::result::Result<T, VectorIndexError>> + Send,
+    T: Send,
 {
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
         match handle.runtime_flavor() {
@@ -125,15 +138,21 @@ where
                     handle.block_on(future).map_err(Error::from)
                 });
             }
-            _ => return futures_executor::block_on(future).map_err(Error::from),
+            _ => {
+                return std::thread::scope(|scope| {
+                    scope
+                        .spawn(|| drive_snapshot_runtime(future))
+                        .join()
+                        .unwrap_or_else(|_| {
+                            Err(Error::Vector(VectorIndexError::Lance(
+                                "snapshot worker thread panicked".into(),
+                            )))
+                        })
+                });
+            }
         }
     }
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|err| Error::Vector(VectorIndexError::Lance(err.to_string())))?
-        .block_on(future)
-        .map_err(Error::from)
+    drive_snapshot_runtime(future)
 }
 
 fn current_time_ms() -> i64 {
