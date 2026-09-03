@@ -191,10 +191,7 @@ impl SoftwareApprovalSigner {
         )
     }
 
-    fn from_key(
-        device_id: String,
-        signing_key: p256::ecdsa::SigningKey,
-    ) -> Result<Self, String> {
+    fn from_key(device_id: String, signing_key: p256::ecdsa::SigningKey) -> Result<Self, String> {
         use p256::pkcs8::EncodePublicKey;
         let spki = signing_key
             .verifying_key()

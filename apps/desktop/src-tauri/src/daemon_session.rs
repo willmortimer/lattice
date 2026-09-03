@@ -110,7 +110,10 @@ pub fn current_exe_sibling(name: &str) -> Option<PathBuf> {
 fn binary_name_candidates(name: &str) -> Vec<String> {
     #[cfg(windows)]
     {
-        if name.rsplit_once('.').is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("exe")) {
+        if name
+            .rsplit_once('.')
+            .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("exe"))
+        {
             vec![name.to_string()]
         } else {
             vec![format!("{name}.exe"), name.to_string()]
@@ -406,7 +409,10 @@ mod tests {
     fn auth_token_path_uses_run_dir_on_windows() {
         let socket = PathBuf::from(r"\\.\pipe\lattice-latticed-alice");
         let path = auth_token_path(&socket);
-        assert_eq!(path.file_name().and_then(|n| n.to_str()), Some("latticed.token"));
+        assert_eq!(
+            path.file_name().and_then(|n| n.to_str()),
+            Some("latticed.token")
+        );
         assert!(
             path.to_string_lossy().contains("Lattice"),
             "expected Lattice run dir, got {}",

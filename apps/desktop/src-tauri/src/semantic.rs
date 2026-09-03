@@ -216,7 +216,13 @@ fn spawn_status_forwarder(
     client: Arc<DaemonClient>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let mut events = match client.subscribe(EventFilter { workspace_id: None, agent_events_only: false }).await {
+        let mut events = match client
+            .subscribe(EventFilter {
+                workspace_id: None,
+                agent_events_only: false,
+            })
+            .await
+        {
             Ok(stream) => stream,
             Err(_) => return,
         };

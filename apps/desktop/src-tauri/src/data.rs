@@ -1394,9 +1394,8 @@ pub fn cleanup_data_attachment_staging(
     dry_run: Option<bool>,
 ) -> Result<StagingCleanupReportDto, String> {
     let (canonical_root, _) = resolve_within_root(&root, ".")?;
-    let max_age = std::time::Duration::from_secs(
-        max_age_hours.unwrap_or(24).saturating_mul(60 * 60),
-    );
+    let max_age =
+        std::time::Duration::from_secs(max_age_hours.unwrap_or(24).saturating_mul(60 * 60));
     let report = lattice_data::cleanup_stale_attachment_staging(
         &canonical_root,
         max_age,

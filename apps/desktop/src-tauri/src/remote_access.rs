@@ -101,9 +101,16 @@ fn workspace_from_registry(entry: &RegistryWorkspace) -> RemoteAccessWorkspace {
     }
 }
 
-fn status_from_registry(registry: &RegistryFile, via: &str, daemon_reachable: bool) -> RemoteAccessStatus {
-    let workspaces: Vec<RemoteAccessWorkspace> =
-        registry.workspaces.iter().map(workspace_from_registry).collect();
+fn status_from_registry(
+    registry: &RegistryFile,
+    via: &str,
+    daemon_reachable: bool,
+) -> RemoteAccessStatus {
+    let workspaces: Vec<RemoteAccessWorkspace> = registry
+        .workspaces
+        .iter()
+        .map(workspace_from_registry)
+        .collect();
     let lease = workspaces.iter().any(|w| w.remote_access_enabled);
     RemoteAccessStatus {
         workspaces,
@@ -162,7 +169,10 @@ fn status_from_http(body: serde_json::Value) -> Option<RemoteAccessStatus> {
     {
         status.remote_access_lease_active = active;
     }
-    if let Some(configured) = body.get("relayConfigured").and_then(|value| value.as_bool()) {
+    if let Some(configured) = body
+        .get("relayConfigured")
+        .and_then(|value| value.as_bool())
+    {
         status.relay_configured = configured;
     }
     Some(status)

@@ -61,10 +61,7 @@ pub fn cloud_update_preferences(
 }
 
 #[tauri::command]
-pub fn product_telemetry_emit(
-    name: String,
-    properties: Option<Value>,
-) -> Result<(), String> {
+pub fn product_telemetry_emit(name: String, properties: Option<Value>) -> Result<(), String> {
     let enabled = ensure_lattice_home()
         .ok()
         .and_then(|home| {

@@ -2,9 +2,7 @@
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use objc2_app_kit::{
-        NSFloatingWindowLevel, NSWindow, NSWindowCollectionBehavior,
-    };
+    use objc2_app_kit::{NSFloatingWindowLevel, NSWindow, NSWindowCollectionBehavior};
     use tauri::WebviewWindow;
 
     fn with_ns_window<F>(window: &WebviewWindow, f: F)

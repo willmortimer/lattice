@@ -31,8 +31,11 @@ fn resource_params(root: &str, path: &str) -> ResourcePathParams {
 fn fixture() -> (TempDir, Arc<LatticeRuntime>, String) {
     let dir = TempDir::new().expect("tempdir");
     Workspace::init(dir.path(), "HTTP Resource").expect("init");
-    std::fs::write(dir.path().join("Notes.md"), b"# Notes\n\nlocal resource stat test.\n")
-        .expect("write");
+    std::fs::write(
+        dir.path().join("Notes.md"),
+        b"# Notes\n\nlocal resource stat test.\n",
+    )
+    .expect("write");
     let root = dir.path().to_string_lossy().into_owned();
     (dir, Arc::new(LatticeRuntime::new()), root)
 }

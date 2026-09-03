@@ -14,8 +14,8 @@ use lattice_connectors::{
     production_token_store, read_gitlab_checkout_file, refresh_gitlab_repo, CheckoutEntry,
     CheckoutFile, ConnectGitLabRepoInput, ConnectedGitLabRepoSummary, GitLabProjectSummary,
     HttpGitLabApiClient, MemoryTokenStore, OAuthClientConfig, OAuthRedirectMode, OAuthSessionStart,
-    TokenStore, GITLAB_AUTHORIZE_URL, GITLAB_OAUTH_TOKEN_URL, GITLAB_PROBE_KEY,
-    GITLAB_TOKEN_SERVICE, GITLAB_USER_TOKEN_KEY, DEFAULT_OAUTH_LOOPBACK_PORT,
+    TokenStore, DEFAULT_OAUTH_LOOPBACK_PORT, GITLAB_AUTHORIZE_URL, GITLAB_OAUTH_TOKEN_URL,
+    GITLAB_PROBE_KEY, GITLAB_TOKEN_SERVICE, GITLAB_USER_TOKEN_KEY,
 };
 use serde::{Deserialize, Serialize};
 
@@ -24,9 +24,8 @@ fn token_store() -> &'static dyn TokenStore {
     static MEMORY: OnceLock<MemoryTokenStore> = OnceLock::new();
     static USE_MEMORY: OnceLock<bool> = OnceLock::new();
 
-    let use_memory = *USE_MEMORY.get_or_init(|| {
-        !probe_token_store_writable(GITLAB_TOKEN_SERVICE, GITLAB_PROBE_KEY)
-    });
+    let use_memory = *USE_MEMORY
+        .get_or_init(|| !probe_token_store_writable(GITLAB_TOKEN_SERVICE, GITLAB_PROBE_KEY));
     if use_memory {
         MEMORY.get_or_init(MemoryTokenStore::new)
     } else {
@@ -53,9 +52,7 @@ fn gitlab_client_id() -> Result<String, String> {
 
 fn gitlab_client_secret() -> Result<String, String> {
     std::env::var("LATTICE_GITLAB_OAUTH_CLIENT_SECRET")
-        .map_err(|_| {
-            "LATTICE_GITLAB_OAUTH_CLIENT_SECRET is required for GitLab OAuth.".to_string()
-        })
+        .map_err(|_| "LATTICE_GITLAB_OAUTH_CLIENT_SECRET is required for GitLab OAuth.".to_string())
         .and_then(|secret| {
             if secret.trim().is_empty() {
                 Err("LATTICE_GITLAB_OAUTH_CLIENT_SECRET is empty".into())

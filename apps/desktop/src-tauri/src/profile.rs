@@ -234,7 +234,9 @@ pub fn save_desktop_session(session: DesktopSession) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn load_workspace_ui_session(workspace_id: String) -> Result<Option<WorkspaceUiSession>, String> {
+pub fn load_workspace_ui_session(
+    workspace_id: String,
+) -> Result<Option<WorkspaceUiSession>, String> {
     let workspace_id = workspace_id.trim();
     if workspace_id.is_empty() {
         return Err("workspaceId is required".into());

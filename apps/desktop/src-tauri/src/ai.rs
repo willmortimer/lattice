@@ -191,15 +191,25 @@ mod tests {
     fn should_use_fake_agent_backend_skips_fake_for_byo_without_key() {
         let mut settings = AiSettings::default();
         settings.mode = AiMode::ByoOpenai;
-        assert!(!should_use_fake_agent_backend(&settings, false, false, false));
+        assert!(!should_use_fake_agent_backend(
+            &settings, false, false, false
+        ));
 
         settings.mode = AiMode::Local;
-        assert!(!should_use_fake_agent_backend(&settings, false, false, false));
-        assert!(!should_use_fake_agent_backend(&settings, false, false, true));
+        assert!(!should_use_fake_agent_backend(
+            &settings, false, false, false
+        ));
+        assert!(!should_use_fake_agent_backend(
+            &settings, false, false, true
+        ));
 
         settings.mode = AiMode::Account;
-        assert!(should_use_fake_agent_backend(&settings, false, false, false));
-        assert!(!should_use_fake_agent_backend(&settings, false, false, true));
+        assert!(should_use_fake_agent_backend(
+            &settings, false, false, false
+        ));
+        assert!(!should_use_fake_agent_backend(
+            &settings, false, false, true
+        ));
     }
 
     #[test]
@@ -209,17 +219,14 @@ mod tests {
             openai_base_url: "https://cloud.test/v1/ai".into(),
         };
         let env = account_ai_spawn_env(&credentials);
-        assert!(
-            env.iter()
-                .any(|(key, value)| key == ENV_AGENT_PROVIDER && value == "openai")
-        );
-        assert!(
-            env.iter().any(|(key, value)| key == ENV_OPENAI_BASE_URL
-                && value == "https://cloud.test/v1/ai")
-        );
-        assert!(
-            env.iter()
-                .any(|(key, value)| key == ENV_OPENAI_API_KEY && value == "cloud-session")
-        );
+        assert!(env
+            .iter()
+            .any(|(key, value)| key == ENV_AGENT_PROVIDER && value == "openai"));
+        assert!(env
+            .iter()
+            .any(|(key, value)| key == ENV_OPENAI_BASE_URL && value == "https://cloud.test/v1/ai"));
+        assert!(env
+            .iter()
+            .any(|(key, value)| key == ENV_OPENAI_API_KEY && value == "cloud-session"));
     }
 }

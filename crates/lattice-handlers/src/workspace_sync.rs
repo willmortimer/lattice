@@ -42,13 +42,8 @@ pub fn push_pull_workspace_sync_with_client<C: CloudHttpClient>(
     root: &str,
     cloud_workspace_id: &str,
 ) -> Result<SyncRunReport, String> {
-    lattice_sync::run_workspace_sync(
-        client,
-        Path::new(root),
-        cloud_workspace_id,
-        bearer,
-    )
-    .map_err(map_err)
+    lattice_sync::run_workspace_sync(client, Path::new(root), cloud_workspace_id, bearer)
+        .map_err(map_err)
 }
 
 /// Ensure a cloud workspace exists for the open root, then run push/pull sync.

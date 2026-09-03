@@ -109,9 +109,7 @@ fn snapshot_from(
     destination_directory: Option<String>,
     workspace_root: Option<String>,
 ) -> CaptureShelfSnapshot {
-    let workspace_name = workspace_root
-        .as_deref()
-        .map(workspace_display_name);
+    let workspace_name = workspace_root.as_deref().map(workspace_display_name);
     CaptureShelfSnapshot {
         count: entries.len(),
         latest_title: entries.front().map(|entry| entry.title.clone()),
@@ -170,9 +168,11 @@ pub fn on_ingested(
     workspace_root: String,
     destination_directory: String,
 ) {
-    let snapshot = app
-        .state::<CaptureShelfState>()
-        .record_ingest(page_path, workspace_root, destination_directory);
+    let snapshot = app.state::<CaptureShelfState>().record_ingest(
+        page_path,
+        workspace_root,
+        destination_directory,
+    );
     let _ = app.emit(CAPTURE_SHELF_UPDATED_EVENT, &snapshot);
     reveal_shelf_window(app, &snapshot, ShelfRevealMode::Passive);
     crate::tray::refresh_from_workflows(app);
@@ -250,7 +250,10 @@ mod tests {
         assert_eq!(snapshot.entries.len(), MAX_ENTRIES);
         assert_eq!(snapshot.entries[0].page_path, "Inbox/clip-24.md");
         assert_eq!(snapshot.entries[0].title, "clip-24.md");
-        assert_eq!(snapshot.entries[MAX_ENTRIES - 1].page_path, "Inbox/clip-5.md");
+        assert_eq!(
+            snapshot.entries[MAX_ENTRIES - 1].page_path,
+            "Inbox/clip-5.md"
+        );
         assert_eq!(snapshot.destination_directory.as_deref(), Some("Inbox"));
         assert_eq!(snapshot.workspace_root.as_deref(), Some(root.as_str()));
         assert_eq!(snapshot.workspace_name.as_deref(), Some("Test Workspace"));

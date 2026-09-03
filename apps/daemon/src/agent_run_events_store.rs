@@ -130,9 +130,11 @@ impl AgentRunEventsStore {
         connection.pragma_update(None, "foreign_keys", "ON")?;
         let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
         if version > SCHEMA_VERSION {
-            return Err(RunEventStoreError::Sqlite(rusqlite::Error::InvalidParameterName(
-                format!("unsupported run_events schema version {version}"),
-            )));
+            return Err(RunEventStoreError::Sqlite(
+                rusqlite::Error::InvalidParameterName(format!(
+                    "unsupported run_events schema version {version}"
+                )),
+            ));
         }
         connection.execute_batch(
             "CREATE TABLE IF NOT EXISTS runs (
@@ -171,14 +173,14 @@ impl AgentRunEventsStore {
     /// Ensure a run row exists (idempotent). Returns the current row.
     pub fn ensure_run(&mut self, run_id: &str, thread_id: &str) -> Result<RunRow> {
         if run_id.trim().is_empty() {
-            return Err(RunEventStoreError::Sqlite(rusqlite::Error::InvalidParameterName(
-                "run_id must not be empty".into(),
-            )));
+            return Err(RunEventStoreError::Sqlite(
+                rusqlite::Error::InvalidParameterName("run_id must not be empty".into()),
+            ));
         }
         if thread_id.trim().is_empty() {
-            return Err(RunEventStoreError::Sqlite(rusqlite::Error::InvalidParameterName(
-                "thread_id must not be empty".into(),
-            )));
+            return Err(RunEventStoreError::Sqlite(
+                rusqlite::Error::InvalidParameterName("thread_id must not be empty".into()),
+            ));
         }
         if let Some(existing) = self.get_run(run_id)? {
             return Ok(existing);
@@ -266,9 +268,9 @@ impl AgentRunEventsStore {
         event_id: Option<String>,
     ) -> Result<RunEventRow> {
         if event_type.trim().is_empty() {
-            return Err(RunEventStoreError::Sqlite(rusqlite::Error::InvalidParameterName(
-                "event_type must not be empty".into(),
-            )));
+            return Err(RunEventStoreError::Sqlite(
+                rusqlite::Error::InvalidParameterName("event_type must not be empty".into()),
+            ));
         }
         let event_id = event_id
             .filter(|value| !value.trim().is_empty())
@@ -308,9 +310,8 @@ impl AgentRunEventsStore {
             )));
         }
 
-        let status = RunStatus::parse(&status_raw).ok_or_else(|| {
-            RunEventStoreError::InvalidStatus(status_raw.clone())
-        })?;
+        let status = RunStatus::parse(&status_raw)
+            .ok_or_else(|| RunEventStoreError::InvalidStatus(status_raw.clone()))?;
         if status.is_terminal() {
             // Allow idempotent re-delivery of an already-stored event after terminal.
             if let Some(existing_event) = Self::get_event_by_id_tx(&transaction, run_id, &event_id)?
@@ -364,11 +365,7 @@ impl AgentRunEventsStore {
     }
 
     /// List events with `event_sequence > after_sequence`, ordered ascending.
-    pub fn list_events_after(
-        &self,
-        run_id: &str,
-        after_sequence: i64,
-    ) -> Result<Vec<RunEventRow>> {
+    pub fn list_events_after(&self, run_id: &str, after_sequence: i64) -> Result<Vec<RunEventRow>> {
         if self.get_run(run_id)?.is_none() {
             return Err(RunEventStoreError::RunNotFound(run_id.to_string()));
         }

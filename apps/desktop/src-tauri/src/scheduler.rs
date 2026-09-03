@@ -46,7 +46,11 @@ fn entry_for_root<'a>(
         .find(|entry| entry.root == key || entry.root == root)
 }
 
-fn status_from_registry(root: &str, registry: &KnownWorkspaceRegistry, via: &str) -> BackgroundScheduleStatus {
+fn status_from_registry(
+    root: &str,
+    registry: &KnownWorkspaceRegistry,
+    via: &str,
+) -> BackgroundScheduleStatus {
     let entry = entry_for_root(registry, root);
     BackgroundScheduleStatus {
         root: normalize_root(root),
@@ -129,7 +133,8 @@ pub fn set_background_schedules_enabled(
             }
         }
         let path = default_scheduler_registry_path();
-        let mut registry = KnownWorkspaceRegistry::load_or_default(&path).map_err(|e| e.to_string())?;
+        let mut registry =
+            KnownWorkspaceRegistry::load_or_default(&path).map_err(|e| e.to_string())?;
         registry.register(Path::new(&root), true);
         registry.save(&path).map_err(|e| e.to_string())?;
         return Ok(status_from_registry(&root, &registry, "file"));

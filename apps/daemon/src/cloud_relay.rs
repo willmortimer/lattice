@@ -12,8 +12,8 @@ use std::time::Duration;
 use axum::http::HeaderValue;
 use futures_util::{SinkExt, StreamExt};
 use lattice_relay_protocol::{
-    Cancel, DeviceHello, Invoke, InvokeResult, Pong, RelayError, RelayFrame,
-    RELAY_PROTOCOL_VERSION, Welcome, WorkspaceAuthority,
+    Cancel, DeviceHello, Invoke, InvokeResult, Pong, RelayError, RelayFrame, Welcome,
+    WorkspaceAuthority, RELAY_PROTOCOL_VERSION,
 };
 use lattice_runtime::LatticeRuntime;
 use serde_json::{json, Value};
@@ -47,7 +47,10 @@ impl CloudRelayConfig {
     /// Load from `LATTICE_CLOUD_URL`, `LATTICE_CLOUD_TOKEN`, `LATTICE_DEVICE_ID`.
     pub fn from_env() -> Option<Self> {
         let cloud_url = std::env::var("LATTICE_CLOUD_URL").ok()?.trim().to_string();
-        let session_token = std::env::var("LATTICE_CLOUD_TOKEN").ok()?.trim().to_string();
+        let session_token = std::env::var("LATTICE_CLOUD_TOKEN")
+            .ok()?
+            .trim()
+            .to_string();
         let device_id = std::env::var("LATTICE_DEVICE_ID").ok()?.trim().to_string();
         if cloud_url.is_empty() || session_token.is_empty() || device_id.is_empty() {
             return None;
@@ -129,10 +132,7 @@ fn should_sync_lease_on_connect(
     registry: &WorkspaceRegistry,
     workspaces: &[WorkspaceAuthority],
 ) -> bool {
-    registry.remote_access_any()
-        || workspaces
-            .iter()
-            .any(|ws| ws.remote_access == Some(true))
+    registry.remote_access_any() || workspaces.iter().any(|ws| ws.remote_access == Some(true))
 }
 
 async fn sync_lease_from_registry(tracker: &Arc<ConnectionTracker>) {
@@ -442,7 +442,11 @@ mod tests {
         };
         let result = invoke_to_result(&runtime, &invoke);
         assert_eq!(result.request_id, "req-1");
-        assert!(result.error.is_none(), "unexpected error: {:?}", result.error);
+        assert!(
+            result.error.is_none(),
+            "unexpected error: {:?}",
+            result.error
+        );
         assert!(result.result.is_some());
         let text = result.result.unwrap().to_string();
         assert!(text.contains("relay-invoke-token") || text.contains("Page.md"));

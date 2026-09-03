@@ -44,9 +44,7 @@ pub fn create_inbox_capture(
 
     let safe_name = validate_asset_file_name(&file_name)?;
     let (canonical_root, relative_page) = join_within_root(&root, &page_rel)?;
-    let page_dir = relative_page
-        .parent()
-        .unwrap_or_else(|| Path::new(""));
+    let page_dir = relative_page.parent().unwrap_or_else(|| Path::new(""));
     let asset_rel = resolve_collision_free_asset_path(&canonical_root, page_dir, &safe_name)?;
     let asset_rel_to_page = asset_rel
         .strip_prefix(page_dir)
@@ -164,9 +162,7 @@ fn file_timestamp(now: SystemTime) -> String {
     let minute = (tod % 3_600) / 60;
     let second = tod % 60;
     let (year, month, day) = utc_civil_from_days(days);
-    format!(
-        "{year:04}-{month:02}-{day:02}T{hour:02}-{minute:02}-{second:02}-{millis:03}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}-{minute:02}-{second:02}-{millis:03}Z")
 }
 
 fn utc_civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
@@ -200,12 +196,7 @@ mod tests {
         let root = dir.path().to_string_lossy().into_owned();
         let fake_png = minimal_test_png();
 
-        let result = ingest_png_capture(
-            root.clone(),
-            fake_png,
-            Some("Inbox".to_string()),
-        )
-        .unwrap();
+        let result = ingest_png_capture(root.clone(), fake_png, Some("Inbox".to_string())).unwrap();
 
         assert!(result.page_path.starts_with("Inbox/"));
         assert!(result.page_path.ends_with(".md"));
@@ -265,13 +256,8 @@ mod tests {
     fn rejects_empty_capture_bytes() {
         let dir = init_workspace();
         let root = dir.path().to_string_lossy().into_owned();
-        let err = create_inbox_capture(
-            root,
-            Vec::new(),
-            "capture.webp".to_string(),
-            None,
-        )
-        .unwrap_err();
+        let err =
+            create_inbox_capture(root, Vec::new(), "capture.webp".to_string(), None).unwrap_err();
         assert!(err.contains("empty"));
     }
 
@@ -297,13 +283,8 @@ mod tests {
         let dir = init_workspace();
         let root = dir.path().to_string_lossy().into_owned();
         let oversized = vec![0xFF; MAX_INBOX_CAPTURE_BYTES + 1];
-        let err = create_inbox_capture(
-            root,
-            oversized,
-            "capture.webp".to_string(),
-            None,
-        )
-        .unwrap_err();
+        let err =
+            create_inbox_capture(root, oversized, "capture.webp".to_string(), None).unwrap_err();
         assert!(err.contains("8 MiB"));
     }
 
@@ -314,13 +295,9 @@ mod tests {
         let bytes = vec![0x89, 0x50, 0x4E, 0x47];
 
         for file_name in ["", ".", "..", "foo/bar.webp", "../capture.webp"] {
-            let err = create_inbox_capture(
-                root.clone(),
-                bytes.clone(),
-                file_name.to_string(),
-                None,
-            )
-            .unwrap_err();
+            let err =
+                create_inbox_capture(root.clone(), bytes.clone(), file_name.to_string(), None)
+                    .unwrap_err();
             assert!(
                 err.contains("invalid") || err.contains("path separators"),
                 "unexpected error for {file_name:?}: {err}"
@@ -337,8 +314,7 @@ mod tests {
         std::fs::create_dir_all(&assets_dir).unwrap();
         std::fs::write(assets_dir.join("capture.webp"), b"existing").unwrap();
 
-        let resolved =
-            resolve_collision_free_asset_path(root, page_dir, "capture.webp").unwrap();
+        let resolved = resolve_collision_free_asset_path(root, page_dir, "capture.webp").unwrap();
         assert_eq!(
             resolved,
             PathBuf::from("Inbox/2026-07-15T20-32-05-123Z/assets/capture 2.webp")

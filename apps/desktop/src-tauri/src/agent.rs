@@ -9,8 +9,7 @@ use std::sync::Arc;
 
 use lattice_client::{request, response, DaemonClient, EventFilter, LatticeClient, Request};
 use lattice_protocol::{
-    event, CancelAgentRunRequest, GetAgentHealthRequest, OpenWorkspaceRequest,
-    StartAgentRunRequest,
+    event, CancelAgentRunRequest, GetAgentHealthRequest, OpenWorkspaceRequest, StartAgentRunRequest,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{ipc::Channel, State};
@@ -631,12 +630,8 @@ pub async fn agent_subscribe_run(
         .map_err(|err| format!("subscribe agent events failed: {err}"))?;
 
     // Initial replay from the durable log.
-    let replay = list_run_events_blocking(
-        workspace_root.clone(),
-        run_id.clone(),
-        after_sequence,
-    )
-    .await?;
+    let replay =
+        list_run_events_blocking(workspace_root.clone(), run_id.clone(), after_sequence).await?;
     let mut run = replay.run;
     let (terminal, mut error) =
         forward_run_event_rows(&channel, &replay.events, &mut after_sequence);
@@ -650,12 +645,9 @@ pub async fn agent_subscribe_run(
         });
     }
     if is_terminal_run_status(&run.status) {
-        let catchup = list_run_events_blocking(
-            workspace_root.clone(),
-            run_id.clone(),
-            after_sequence,
-        )
-        .await?;
+        let catchup =
+            list_run_events_blocking(workspace_root.clone(), run_id.clone(), after_sequence)
+                .await?;
         run = catchup.run;
         let (terminal, err) =
             forward_run_event_rows(&channel, &catchup.events, &mut after_sequence);
@@ -724,15 +716,11 @@ pub async fn agent_subscribe_run(
             _ = tokio::time::sleep(std::time::Duration::from_millis(150)) => {}
         }
 
-        let listed = list_run_events_blocking(
-            workspace_root.clone(),
-            run_id.clone(),
-            after_sequence,
-        )
-        .await?;
+        let listed =
+            list_run_events_blocking(workspace_root.clone(), run_id.clone(), after_sequence)
+                .await?;
         run = listed.run;
-        let (terminal, err) =
-            forward_run_event_rows(&channel, &listed.events, &mut after_sequence);
+        let (terminal, err) = forward_run_event_rows(&channel, &listed.events, &mut after_sequence);
         if terminal {
             return Ok(AgentSubscribeRunResult {
                 run_id,
@@ -769,7 +757,9 @@ mod tests {
 
     #[test]
     fn agent_spawn_env_defaults_fake_without_provider_keys() {
-        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let _guard = EnvGuard::set(ENV_PIONEER_API_KEY, None);
         let _openai = EnvGuard::set(ENV_OPENAI_API_KEY, None);
         let _fake_guard = EnvGuard::set(ENV_AGENT_FAKE, None);
@@ -785,7 +775,9 @@ mod tests {
 
     #[test]
     fn agent_spawn_env_forces_openai_provider_for_byo_profile() {
-        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let _guard = EnvGuard::set(ENV_PIONEER_API_KEY, Some("pioneer-test"));
         let _openai = EnvGuard::set(ENV_OPENAI_API_KEY, None);
         let _fake_guard = EnvGuard::set(ENV_AGENT_FAKE, None);
@@ -797,16 +789,15 @@ mod tests {
         let provider = crate::ai::agent_provider_for_profile(&settings);
         assert_eq!(provider, Some("openai"));
         assert!(!crate::ai::should_use_fake_agent_backend(
-            &settings,
-            false,
-            true,
-            false
+            &settings, false, true, false
         ));
     }
 
     #[test]
     fn agent_spawn_env_uses_sidecar_when_openai_key_present() {
-        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let _guard = EnvGuard::set(ENV_PIONEER_API_KEY, None);
         let _openai = EnvGuard::set(ENV_OPENAI_API_KEY, Some("sk-test"));
         let _fake_guard = EnvGuard::set(ENV_AGENT_FAKE, None);
@@ -833,8 +824,7 @@ mod tests {
             "runId": "run-1",
             "chunk": { "type": "text-delta", "id": "c1", "delta": "hi" }
         });
-        let (messages, terminal) =
-            agent_event_messages("run-1", "message_chunk", &payload);
+        let (messages, terminal) = agent_event_messages("run-1", "message_chunk", &payload);
         assert!(!terminal);
         assert_eq!(messages.len(), 2);
         assert!(matches!(messages[0], AgentStreamMsg::AgentEvent { .. }));
@@ -868,10 +858,7 @@ mod tests {
         });
         let (messages, terminal) = agent_event_messages("run-3", "run_cancelled", &payload);
         assert!(terminal);
-        assert!(matches!(
-            messages.last(),
-            Some(AgentStreamMsg::Done { .. })
-        ));
+        assert!(matches!(messages.last(), Some(AgentStreamMsg::Done { .. })));
     }
 
     struct EnvGuard {

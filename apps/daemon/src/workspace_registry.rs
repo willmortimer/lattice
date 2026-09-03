@@ -12,7 +12,10 @@ use crate::idle::ConnectionTracker;
 /// Sync the connection tracker's remote-access lease from registry state.
 ///
 /// Relay client lifecycle hooks (H6) should call this after mutating remote access.
-pub async fn sync_remote_access_lease(tracker: &Arc<ConnectionTracker>, registry: &WorkspaceRegistry) {
+pub async fn sync_remote_access_lease(
+    tracker: &Arc<ConnectionTracker>,
+    registry: &WorkspaceRegistry,
+) {
     tracker
         .set_remote_access_lease(registry.remote_access_any())
         .await;
@@ -45,10 +48,7 @@ mod tests {
         let session = runtime
             .open_workspace_session(dir.path())
             .expect("open session");
-        (
-            dir.path().to_path_buf(),
-            session.workspace_id().to_string(),
-        )
+        (dir.path().to_path_buf(), session.workspace_id().to_string())
     }
 
     #[test]
@@ -104,7 +104,10 @@ mod tests {
             Err(err) => err,
             Ok(_) => panic!("unknown id should fail"),
         };
-        assert!(matches!(err, crate::api::ApiError::WorkspaceNotRegistered(_)));
+        assert!(matches!(
+            err,
+            crate::api::ApiError::WorkspaceNotRegistered(_)
+        ));
         assert_eq!(err.code(), "workspace_not_registered");
     }
 
@@ -152,7 +155,10 @@ mod tests {
         tracker.on_connect().await;
         drop(tracker.guard());
         sleep(TokioDuration::from_millis(150)).await;
-        assert!(rx.try_recv().is_err(), "remote access lease should block idle shutdown");
+        assert!(
+            rx.try_recv().is_err(),
+            "remote access lease should block idle shutdown"
+        );
 
         let mut released = loaded;
         released.set_remote_access(&workspace_id, false);

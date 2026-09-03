@@ -1,6 +1,8 @@
 //! [`HttpCloudBlobClient`] — production [`CloudBlobClient`] over bearer auth.
 
-use latticefs_core::{CloudBlobClient, ContentHash, Error as FsError, ResourceId, Result as FsResult};
+use latticefs_core::{
+    CloudBlobClient, ContentHash, Error as FsError, ResourceId, Result as FsResult,
+};
 
 use crate::client::CloudApiClient;
 use crate::error::CloudError;
@@ -146,10 +148,7 @@ mod tests {
                         .map(|(_, value)| *value)
                         .expect("hash header");
                     let computed_hash = ContentHash::from_bytes(data).expect("hash");
-                    let computed = computed_hash
-                        .as_str()
-                        .strip_prefix("sha256:")
-                        .unwrap();
+                    let computed = computed_hash.as_str().strip_prefix("sha256:").unwrap();
                     assert_eq!(hash_header, computed);
                     self.stored.lock().unwrap().insert(
                         path.trim_start_matches("/v1/blobs/").to_string(),
@@ -238,9 +237,7 @@ mod tests {
         let http = OfflineBlobHttp { fail: true };
         let client = CloudApiClient::with_base_url(http, "https://cloud.test");
         let blob_client = HttpCloudBlobClient::new(client, "good-token");
-        let err = blob_client
-            .get_blob(ResourceId::new())
-            .unwrap_err();
+        let err = blob_client.get_blob(ResourceId::new()).unwrap_err();
         assert!(matches!(err, FsError::CloudBlob { .. }));
         assert!(err.to_string().contains("network unreachable"));
     }
@@ -250,9 +247,7 @@ mod tests {
         let http = OfflineBlobHttp::default();
         let client = CloudApiClient::with_base_url(http, "https://cloud.test");
         let blob_client = HttpCloudBlobClient::new(client, "good-token");
-        let err = blob_client
-            .get_blob(ResourceId::new())
-            .unwrap_err();
+        let err = blob_client.get_blob(ResourceId::new()).unwrap_err();
         assert!(matches!(err, FsError::CloudBlob { .. }));
         assert!(err.to_string().contains("503"));
     }
@@ -262,9 +257,7 @@ mod tests {
         let http = BlobFakeHttp::default();
         let client = CloudApiClient::with_base_url(http, "https://cloud.test");
         let blob_client = HttpCloudBlobClient::new(client, "bad-token");
-        let err = blob_client
-            .get_blob(ResourceId::new())
-            .unwrap_err();
+        let err = blob_client.get_blob(ResourceId::new()).unwrap_err();
         assert!(matches!(err, FsError::CloudBlob { .. }));
         assert!(err.to_string().contains("401"));
     }

@@ -224,10 +224,7 @@ fn spawn_stderr_path(socket_path: &Path) -> PathBuf {
     #[cfg(windows)]
     {
         let _ = socket_path;
-        std::env::temp_dir().join(format!(
-            "latticed-spawn-{}.stderr",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("latticed-spawn-{}.stderr", std::process::id()))
     }
     #[cfg(unix)]
     {

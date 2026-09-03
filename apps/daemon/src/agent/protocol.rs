@@ -84,10 +84,18 @@ pub enum AgentCommand {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         prompt: Option<String>,
         /// Open daemon session id for Lattice HTTP tools.
-        #[serde(default, rename = "workspaceId", skip_serializing_if = "Option::is_none")]
+        #[serde(
+            default,
+            rename = "workspaceId",
+            skip_serializing_if = "Option::is_none"
+        )]
         workspace_id: Option<String>,
         /// Absolute workspace root when no session id is available.
-        #[serde(default, rename = "workspaceRoot", skip_serializing_if = "Option::is_none")]
+        #[serde(
+            default,
+            rename = "workspaceRoot",
+            skip_serializing_if = "Option::is_none"
+        )]
         workspace_root: Option<String>,
     },
     #[serde(rename = "cancel_run")]

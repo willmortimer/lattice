@@ -86,7 +86,11 @@ fn catalog_entry_from_registry(entry: &RegistryWorkspace) -> WorkspaceCatalogEnt
     }
 }
 
-fn catalog_from_registry(registry: &RegistryFile, via: &str, daemon_reachable: bool) -> WorkspaceCatalog {
+fn catalog_from_registry(
+    registry: &RegistryFile,
+    via: &str,
+    daemon_reachable: bool,
+) -> WorkspaceCatalog {
     WorkspaceCatalog {
         workspaces: registry
             .workspaces
@@ -142,7 +146,10 @@ fn http_post_json(path: &str, body: &serde_json::Value) -> Option<serde_json::Va
 
 fn title_from_root(root: &str) -> String {
     let normalized = root.replace('\\', "/");
-    let parts: Vec<&str> = normalized.split('/').filter(|part| !part.is_empty()).collect();
+    let parts: Vec<&str> = normalized
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
     parts
         .last()
         .map(|segment| (*segment).to_string())
@@ -179,7 +186,8 @@ fn summary_from_registry_entry(entry: &RegistryWorkspace, via: &str) -> Workspac
 fn load_registry_with_via() -> Result<(RegistryFile, String, bool), String> {
     if let Some(body) = http_post_json("/v1/workspace/list_registry", &serde_json::json!({})) {
         if let Some(workspaces_value) = body.get("workspaces") {
-            if let Ok(entries) = serde_json::from_value::<Vec<RegistryWorkspace>>(workspaces_value.clone())
+            if let Ok(entries) =
+                serde_json::from_value::<Vec<RegistryWorkspace>>(workspaces_value.clone())
             {
                 return Ok((
                     RegistryFile {

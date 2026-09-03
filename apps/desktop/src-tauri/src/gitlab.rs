@@ -1,8 +1,7 @@
 //! Tauri commands for GitLab connected extracts.
 
 #[tauri::command]
-pub fn gitlab_oauth_begin(
-) -> Result<lattice_handlers::GitlabOAuthStartResult, String> {
+pub fn gitlab_oauth_begin() -> Result<lattice_handlers::GitlabOAuthStartResult, String> {
     lattice_handlers::gitlab_oauth_begin()
 }
 

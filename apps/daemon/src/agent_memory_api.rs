@@ -9,9 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use lattice_embedding::{
-    EmbedDocumentRequest, EmbedQueryRequest, EmbeddingProvider,
-};
+use lattice_embedding::{EmbedDocumentRequest, EmbedQueryRequest, EmbeddingProvider};
 use lattice_lance::{
     AgentMemoryRecallRequest, AgentMemoryRecallResults, AgentMemoryRow, AgentMemoryStore,
     AGENT_MEMORY_EMBEDDING_WIDTH,
@@ -265,7 +263,8 @@ pub fn api_recall(
     semantic: Option<&SemanticController>,
     params: RecallParams,
 ) -> Result<RecallResponse, ApiError> {
-    if params.query.trim().is_empty() && params.query_embedding.as_ref().is_none_or(|v| v.is_empty())
+    if params.query.trim().is_empty()
+        && params.query_embedding.as_ref().is_none_or(|v| v.is_empty())
     {
         return Err(ApiError::BadRequest(
             "query or queryEmbedding is required".into(),
@@ -281,7 +280,9 @@ pub fn api_recall(
     let root = workspace_root_from_session(&session);
 
     let mut query_embedding = params.query_embedding;
-    if query_embedding.as_ref().is_none_or(|values| values.is_empty())
+    if query_embedding
+        .as_ref()
+        .is_none_or(|values| values.is_empty())
         && !params.query.trim().is_empty()
     {
         if let Some(provider) = agent_memory_embedding_provider(semantic) {
@@ -313,10 +314,7 @@ pub fn api_recall(
         })
         .collect();
 
-    Ok(RecallResponse {
-        workspace_id,
-        hits,
-    })
+    Ok(RecallResponse { workspace_id, hits })
 }
 
 /// Delete workspace-local agent memory rows by id.
@@ -389,8 +387,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn try_embed_memory_text_returns_vector_for_matching_provider() {
         let provider = fake_provider(AGENT_MEMORY_EMBEDDING_WIDTH);
-        let vector = try_embed_memory_text(&provider, "mem-1", "user prefers dark mode")
-            .expect("embedding");
+        let vector =
+            try_embed_memory_text(&provider, "mem-1", "user prefers dark mode").expect("embedding");
         assert_eq!(vector.len(), AGENT_MEMORY_EMBEDDING_WIDTH as usize);
     }
 

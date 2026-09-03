@@ -144,10 +144,10 @@ pub fn presence_available() -> bool {
 #[cfg(any(test, target_os = "windows"))]
 pub(crate) fn map_user_consent_verification_result(code: i32) -> Result<(), PresenceError> {
     match code {
-        0 => Ok(()),                                  // Verified
-        6 => Err(PresenceError::Cancelled),           // Canceled
+        0 => Ok(()),                                   // Verified
+        6 => Err(PresenceError::Cancelled),            // Canceled
         1 | 2 | 3 => Err(PresenceError::NotAvailable), // DeviceNotPresent / NotConfigured / DisabledByPolicy
-        _ => Err(PresenceError::Failed),              // DeviceBusy / RetriesExhausted / unknown
+        _ => Err(PresenceError::Failed),               // DeviceBusy / RetriesExhausted / unknown
     }
 }
 
@@ -243,9 +243,7 @@ mod windows_hello {
     use std::thread;
 
     use windows::core::{factory, HSTRING};
-    use windows::Security::Credentials::UI::{
-        UserConsentVerificationResult, UserConsentVerifier,
-    };
+    use windows::Security::Credentials::UI::{UserConsentVerificationResult, UserConsentVerifier};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::WinRT::IUserConsentVerifierInterop;
     use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
@@ -318,9 +316,8 @@ mod windows_hello {
     }
 
     fn check_availability(
-    ) -> windows::core::Result<
-        windows::Security::Credentials::UI::UserConsentVerifierAvailability,
-    > {
+    ) -> windows::core::Result<windows::Security::Credentials::UI::UserConsentVerifierAvailability>
+    {
         UserConsentVerifier::CheckAvailabilityAsync()?.get()
     }
 

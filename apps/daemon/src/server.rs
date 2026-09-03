@@ -2,9 +2,9 @@
 //!
 //! Unix: Unix-domain socket. Windows: named pipe (`ServerOptions` multi-instance).
 
-use std::path::PathBuf;
 #[cfg(windows)]
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -12,6 +12,7 @@ use bytes::BytesMut;
 use lattice_client::{
     decode_handshake_frame, encode_handshake_frame, HandshakeRequest, HandshakeResponse,
 };
+use lattice_collab::CollabRegistry;
 use lattice_protocol::{
     encode_frame, envelope, error_envelope, event, event_envelope, request, response,
     response_envelope, ApplyCollabUpdateRequest, ApplyCollabUpdateResponse, ApplyPageUpdateRequest,
@@ -22,15 +23,13 @@ use lattice_protocol::{
     GetCollabStateResponse, GetSemanticStatusRequest, GetSemanticStatusResponse, HealthRequest,
     HealthResponse, IndexProgress, OpenCollabDocRequest, OpenCollabDocResponse,
     OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest, PingResponse, Request,
-    ResourceChanged, Response, SearchRequest, SearchResponse,
-    SemanticStatus as WireSemanticStatus, StartAgentRunRequest, StartAgentRunResponse,
-    WorkspaceLeaseChanged, PROTOCOL_VERSION,
+    ResourceChanged, Response, SearchRequest, SearchResponse, SemanticStatus as WireSemanticStatus,
+    StartAgentRunRequest, StartAgentRunResponse, WorkspaceLeaseChanged, PROTOCOL_VERSION,
 };
 use lattice_runtime::{
     IdempotentOutcome, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, RuntimeResourceChanged,
     SemanticStatus,
 };
-use lattice_collab::CollabRegistry;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, oneshot, Mutex};
 use tracing::{debug, info, warn};
@@ -238,11 +237,7 @@ pub async fn serve_with_shutdown_and_controllers(
             device_id = %relay.device_id,
             "cloud device relay enabled via environment"
         );
-        spawn_cloud_relay(
-            Arc::clone(&runtime),
-            relay,
-            Some(Arc::clone(&connections)),
-        );
+        spawn_cloud_relay(Arc::clone(&runtime), relay, Some(Arc::clone(&connections)));
     }
     let state = DaemonState::new_with_controllers(config, runtime, semantic, voice, agent)
         .with_connections(Arc::clone(&connections));
@@ -361,8 +356,7 @@ async fn wait_for_shutdown_signal() -> std::io::Result<()> {
     {
         let mut sigterm =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-        let mut sigint =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+        let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
         tokio::select! {
             _ = sigterm.recv() => {}
             _ = sigint.recv() => {}
@@ -584,9 +578,7 @@ async fn handle_request(
             workspace_id,
             doc_id,
             path,
-        })) => {
-            handle_open_collab_doc(state, workspace_id, doc_id, path).await
-        }
+        })) => handle_open_collab_doc(state, workspace_id, doc_id, path).await,
         Some(request::Body::ApplyCollabUpdate(ApplyCollabUpdateRequest {
             workspace_id,
             doc_id,
@@ -949,8 +941,7 @@ fn handle_open_workspace(
 
     let wire_lease = lease_to_wire(&lease_file);
     let workspace_id = session.workspace_id().to_string();
-    if let Err(err) = crate::workspace_registry::register_workspace(&workspace_id, session.root())
-    {
+    if let Err(err) = crate::workspace_registry::register_workspace(&workspace_id, session.root()) {
         warn!(
             %workspace_id,
             root = %session.root().display(),
@@ -1139,11 +1130,7 @@ async fn handle_open_collab_doc(
     let root = session.root().to_path_buf();
     let mut collab = state.collab.lock().await;
     let opened = collab
-        .open(
-            &doc_id,
-            Some(root.as_path()),
-            path.as_deref(),
-        )
+        .open(&doc_id, Some(root.as_path()), path.as_deref())
         .map_err(collab_error_to_wire)?;
     Ok((
         Response {

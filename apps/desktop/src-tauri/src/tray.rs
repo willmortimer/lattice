@@ -27,8 +27,8 @@ use serde::Serialize;
 use tauri::{image::Image, tray::TrayIconBuilder, AppHandle, Emitter, Manager};
 
 use crate::app_menu;
-use crate::workspace_root;
 use crate::workflow::{self, WorkflowState};
+use crate::workspace_root;
 
 const TRAY_ID: &str = "lattice.main-tray";
 const ENV_AUTH_TOKEN: &str = "LATTICE_AUTH_TOKEN";
@@ -100,10 +100,7 @@ pub fn open_quick_note(app: &AppHandle, requested_root: Option<String>) {
             let _ = window.emit(
                 "quick-note-open",
                 QuickNoteOpenPayload {
-                    root: prepared
-                        .as_ref()
-                        .map(|note| note.root.clone())
-                        .or(root),
+                    root: prepared.as_ref().map(|note| note.root.clone()).or(root),
                     prepared,
                 },
             );

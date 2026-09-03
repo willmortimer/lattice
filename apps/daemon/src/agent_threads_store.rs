@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use lattice_core::OPERATIONAL_DIR;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -435,12 +435,10 @@ mod tests {
 
         store.delete_thread("thread-1").expect("delete");
         assert!(store.get_thread("thread-1").expect("get").is_none());
-        assert!(
-            store
-                .list_messages("thread-1")
-                .expect("messages")
-                .is_empty()
-        );
+        assert!(store
+            .list_messages("thread-1")
+            .expect("messages")
+            .is_empty());
         assert!(matches!(
             store.rename_thread("thread-1", Some("gone".into())),
             Err(ThreadStoreError::ThreadNotFound(_))

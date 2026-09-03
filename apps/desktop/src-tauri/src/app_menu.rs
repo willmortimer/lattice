@@ -243,13 +243,8 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     )?;
     let home = MenuItem::with_id(app, ACTION_HOME, "Home", true, None::<&str>)?;
     let files = MenuItem::with_id(app, ACTION_FILES, "Files", true, None::<&str>)?;
-    let help_workspace_tour = MenuItem::with_id(
-        app,
-        ACTION_SHELL_TOUR,
-        "Workspace Tour",
-        true,
-        None::<&str>,
-    )?;
+    let help_workspace_tour =
+        MenuItem::with_id(app, ACTION_SHELL_TOUR, "Workspace Tour", true, None::<&str>)?;
     let help_lattice = MenuItem::with_id(app, ACTION_HELP, "Lattice Help", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, ACTION_QUIT, "Quit Lattice", true, Some("CmdOrCtrl+Q"))?;
 

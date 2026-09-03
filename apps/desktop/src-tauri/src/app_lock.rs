@@ -331,7 +331,10 @@ pub fn app_lock_status(state: State<'_, AppLockState>) -> AppLockStatus {
 }
 
 #[tauri::command]
-pub fn app_lock_lock(app: AppHandle, state: State<'_, AppLockState>) -> Result<AppLockStatus, String> {
+pub fn app_lock_lock(
+    app: AppHandle,
+    state: State<'_, AppLockState>,
+) -> Result<AppLockStatus, String> {
     if !state.status().enabled {
         return Err("App lock is not enabled".into());
     }
@@ -369,9 +372,8 @@ pub fn app_lock_enable(
     }
     request_user_presence_for_window(PresenceReason::EnableAppLock, main_window_hwnd(&app))
         .map_err(|err| format!("{}: {err}", err.code()))?;
-    let minutes = clamp_idle_minutes(
-        idle_lock_minutes.unwrap_or_else(|| state.status().idle_lock_minutes),
-    );
+    let minutes =
+        clamp_idle_minutes(idle_lock_minutes.unwrap_or_else(|| state.status().idle_lock_minutes));
     let home = ensure_lattice_home().map_err(|err| err.to_string())?;
     let mut loaded = home
         .settings_store()
@@ -423,21 +425,19 @@ mod sleep_observer {
 
     pub(super) fn install(app: &AppHandle) {
         let center = NSWorkspace::sharedWorkspace().notificationCenter();
-        let names = [
-            unsafe { NSWorkspaceWillSleepNotification },
-            unsafe { NSWorkspaceScreensDidSleepNotification },
-        ];
+        let names = [unsafe { NSWorkspaceWillSleepNotification }, unsafe {
+            NSWorkspaceScreensDidSleepNotification
+        }];
         for name in names {
             let app = app.clone();
-            let block =
-                RcBlock::new(move |_notification: NonNull<NSNotification>| {
-                    let Some(state) = app.try_state::<AppLockState>() else {
-                        return;
-                    };
-                    if state.lock_now() {
-                        emit_status(&app, &state.status());
-                    }
-                });
+            let block = RcBlock::new(move |_notification: NonNull<NSNotification>| {
+                let Some(state) = app.try_state::<AppLockState>() else {
+                    return;
+                };
+                if state.lock_now() {
+                    emit_status(&app, &state.status());
+                }
+            });
             let token = unsafe {
                 center.addObserverForName_object_queue_usingBlock(
                     Some(name),

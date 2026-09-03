@@ -144,7 +144,11 @@ mod tests {
                 .unwrap_or_else(|_| std::path::PathBuf::from(&default.root))
         );
         assert_eq!(
-            default_workspace_registry_path().parent().unwrap().parent().unwrap(),
+            default_workspace_registry_path()
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap(),
             directory.path()
         );
 

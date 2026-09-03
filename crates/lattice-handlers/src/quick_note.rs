@@ -88,7 +88,10 @@ fn resolve_quick_note_template_path(
             candidates.push(format!("{trimmed}/Daily.md"));
         }
     }
-    if !candidates.iter().any(|candidate| candidate == "Templates/Daily.md") {
+    if !candidates
+        .iter()
+        .any(|candidate| candidate == "Templates/Daily.md")
+    {
         candidates.push("Templates/Daily.md".to_string());
     }
     candidates
@@ -130,7 +133,10 @@ mod tests {
         );
         assert_eq!(prepared.workspace_title, "Test Workspace");
         assert_eq!(prepared.quick_note_directory, "Inbox");
-        assert_eq!(prepared.template_path.as_deref(), Some("Templates/Daily.md"));
+        assert_eq!(
+            prepared.template_path.as_deref(),
+            Some("Templates/Daily.md")
+        );
         assert!(prepared.path.starts_with("Inbox/"));
         assert!(prepared.path.ends_with(".md"));
         assert!(prepared.revision.starts_with("sha256:"));

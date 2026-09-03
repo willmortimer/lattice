@@ -102,7 +102,12 @@ fn status_view(status: DerivedStatus) -> DerivedStatusView {
         current_inputs: status.current_inputs.iter().map(input_view).collect(),
         output_hash: status.output_hash,
         builder_hash: status.builder_hash,
-        stale_reasons: status.stale_reasons.iter().copied().map(stale_reason_str).collect(),
+        stale_reasons: status
+            .stale_reasons
+            .iter()
+            .copied()
+            .map(stale_reason_str)
+            .collect(),
         last_built_at: status.last_built_at,
         last_error: status.last_error,
     }

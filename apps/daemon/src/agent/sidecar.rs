@@ -609,7 +609,9 @@ mod tests {
 
     #[test]
     fn default_provider_from_env_honors_explicit_openai() {
-        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, Some("openai"));
         let _openai = EnvGuard::set("OPENAI_API_KEY", None);
         let _pioneer = EnvGuard::set("PIONEER_API_KEY", Some("pioneer-test"));
@@ -618,7 +620,9 @@ mod tests {
 
     #[test]
     fn default_provider_from_env_prefers_openai_when_both_keys_present() {
-        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, None);
         let _openai = EnvGuard::set("OPENAI_API_KEY", Some("sk-test"));
         let _pioneer = EnvGuard::set("PIONEER_API_KEY", Some("pioneer-test"));

@@ -10,7 +10,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::agent_threads_store::{AgentThreadsStore, MessageRow, ThreadRow, ThreadStoreError};
-use crate::api::{ApiError, resolve_session};
+use crate::api::{resolve_session, ApiError};
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -34,15 +34,21 @@ pub struct CatalogEntry {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum CatalogDelta {
-    Upsert { entries: Vec<CatalogEntry> },
-    Remove { resource_ids: Vec<String> },
+    Upsert {
+        entries: Vec<CatalogEntry>,
+    },
+    Remove {
+        resource_ids: Vec<String>,
+    },
     /// Sibling order under `parent_id` (`None` = workspace root).
     Reorder {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_id: Option<String>,
         ordered_ids: Vec<String>,
     },
-    Replace { entries: Vec<CatalogEntry> },
+    Replace {
+        entries: Vec<CatalogEntry>,
+    },
 }
 
 /// One page of direct children under a parent folder (or workspace root).
@@ -256,7 +262,9 @@ fn entry_for_path(
         .map(|resources| {
             resources
                 .iter()
-                .filter(|candidate| parent_path_of(&path_key(&candidate.path)).as_deref() == Some(path.as_str()))
+                .filter(|candidate| {
+                    parent_path_of(&path_key(&candidate.path)).as_deref() == Some(path.as_str())
+                })
                 .count() as u32
         })
         .unwrap_or(0);
@@ -331,7 +339,10 @@ fn resolve_parent_path(
     parent_id: Option<&str>,
     parent_path: Option<&str>,
 ) -> Result<Option<String>, String> {
-    match (parent_id.map(str::trim).filter(|v| !v.is_empty()), parent_path.map(str::trim).filter(|v| !v.is_empty())) {
+    match (
+        parent_id.map(str::trim).filter(|v| !v.is_empty()),
+        parent_path.map(str::trim).filter(|v| !v.is_empty()),
+    ) {
         (None, None) => Ok(None),
         (Some(id), path_opt) => {
             let resource_id = ResourceId::from_str(id).map_err(|err| err.to_string())?;

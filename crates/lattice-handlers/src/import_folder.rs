@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use lattice_core::{OPERATIONAL_DIR, WORKSPACE_MANIFEST_FILENAME, Workspace};
+use lattice_core::{Workspace, OPERATIONAL_DIR, WORKSPACE_MANIFEST_FILENAME};
 use lattice_storage::atomic_write_file;
 use serde::Serialize;
 
@@ -297,20 +297,16 @@ mod tests {
             fs::read_to_string(workspace.path().join("Incoming/keep.md")).unwrap(),
             "keep\n"
         );
-        assert!(
-            !workspace
-                .path()
-                .join("Incoming")
-                .join(WORKSPACE_MANIFEST_FILENAME)
-                .exists()
-        );
-        assert!(
-            !workspace
-                .path()
-                .join("Incoming")
-                .join(OPERATIONAL_DIR)
-                .exists()
-        );
+        assert!(!workspace
+            .path()
+            .join("Incoming")
+            .join(WORKSPACE_MANIFEST_FILENAME)
+            .exists());
+        assert!(!workspace
+            .path()
+            .join("Incoming")
+            .join(OPERATIONAL_DIR)
+            .exists());
         assert_eq!(
             fs::read_to_string(workspace.path().join(WORKSPACE_MANIFEST_FILENAME)).unwrap(),
             original_manifest

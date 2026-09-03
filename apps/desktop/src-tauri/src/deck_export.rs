@@ -91,7 +91,11 @@ impl DeckPdfExporter for MacosDeckPdfExporter {
             .ok_or_else(|| "PDF export destination has no parent directory".to_string())?;
         let probe = parent.join(".lattice-deck-pdf-probe.html");
         let _ = std::fs::remove_file(&probe);
-        let generated = export_deck_html(Path::new(&request.root), Path::new(&request.rel_path), &probe);
+        let generated = export_deck_html(
+            Path::new(&request.root),
+            Path::new(&request.rel_path),
+            &probe,
+        );
         let _ = std::fs::remove_file(&probe);
         generated.map_err(|error| error.to_string())?;
         Ok(DeckPdfExportResult::Unavailable {

@@ -4,13 +4,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use lattice_cloud_client::{
-    BackupMetadataResponse, CloudApiClient, CloudHttpClient, HttpCloudClient, default_client,
+    default_client, BackupMetadataResponse, CloudApiClient, CloudHttpClient, HttpCloudClient,
 };
 use lattice_core::{Workspace, WorkspaceManifest};
 use lattice_storage::atomic_write_file;
 use lattice_workspace_crypto::{
-    BackupPayload, Dek, build_workspace_backup_payload, decrypt_blob, is_backup_envelope,
-    open_backup_envelope, parse_workspace_backup_payload, seal_backup_envelope,
+    build_workspace_backup_payload, decrypt_blob, is_backup_envelope, open_backup_envelope,
+    parse_workspace_backup_payload, seal_backup_envelope, BackupPayload, Dek,
 };
 use serde::Serialize;
 
@@ -478,9 +478,9 @@ mod tests {
     };
     use lattice_core::Workspace;
     use lattice_workspace_crypto::{
-        Dek, ENVELOPE_MAGIC, MemoryKeystore, WorkspaceCryptoSession,
         build_workspace_backup_payload, decrypt_blob, is_backup_envelope, open_backup_envelope,
-        parse_workspace_backup_payload, seal_backup_envelope,
+        parse_workspace_backup_payload, seal_backup_envelope, Dek, MemoryKeystore,
+        WorkspaceCryptoSession, ENVELOPE_MAGIC,
     };
     use latticefs_core::ContentHash;
 
@@ -792,12 +792,10 @@ mod tests {
 
         assert_eq!(result.backup_id, "bk-latest");
         assert!(result.restored_count >= 2);
-        assert!(
-            result
-                .skipped
-                .iter()
-                .any(|s| s.path == "Notes.md" && s.reason.contains("different content"))
-        );
+        assert!(result
+            .skipped
+            .iter()
+            .any(|s| s.path == "Notes.md" && s.reason.contains("different content")));
         assert_eq!(
             std::fs::read(target.path().join("Notes.md")).unwrap(),
             b"local different"

@@ -308,7 +308,10 @@ pub(super) async fn start_session(
     }
 
     let mut events = client
-        .subscribe(EventFilter { workspace_id: None, agent_events_only: false })
+        .subscribe(EventFilter {
+            workspace_id: None,
+            agent_events_only: false,
+        })
         .await
         .map_err(|err| format!("subscribe voice events failed: {err}"))?;
 

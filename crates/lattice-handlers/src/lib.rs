@@ -64,16 +64,22 @@ pub use gitlab::{
     gitlab_list_projects, gitlab_oauth_begin, gitlab_oauth_begin_loopback, gitlab_oauth_finish,
     gitlab_read_checkout_file, gitlab_refresh_repo, GitlabOAuthStartResult,
 };
-pub use oauth::oauth_ingest_callback;
 pub use home::{
     create_workspace, ensure_home, list_templates, LatticeHomeInfo, WorkspaceProvisionResult,
 };
 pub use import_folder::{
     import_folder_into_workspace, FolderImportResult, FolderImportSkippedEntry,
 };
+pub use lattice_sync::{
+    ConflictResolution, ExecuteOutcome, ExecuteResult, SyncRunReport, SyncStatus,
+};
+pub use oauth::oauth_ingest_callback;
 pub use page::{apply_page_update, create_page, read_page, PageContent};
-pub use quick_note::{prepare_quick_note, prepare_quick_note_with_runtime, prepare_quick_note_with_session, QuickNotePrepared};
 pub use path::{join_within_root, resolve_within_root, validate_workspace_relative};
+pub use quick_note::{
+    prepare_quick_note, prepare_quick_note_with_runtime, prepare_quick_note_with_session,
+    QuickNotePrepared,
+};
 pub use search::{
     disable_semantic_search, disable_semantic_search_with_runtime,
     disable_semantic_search_with_session, embed_workspace_pending_chunks,
@@ -108,14 +114,10 @@ pub use workspace_backup::{
     EncryptedBackupSkippedEntry,
 };
 pub use workspace_crypto::{
-    workspace_crypto_lock, workspace_crypto_status, workspace_crypto_unlock,
-    WorkspaceCryptoStatus,
+    workspace_crypto_lock, workspace_crypto_status, workspace_crypto_unlock, WorkspaceCryptoStatus,
 };
 pub use workspace_sync::{
     push_pull_workspace_sync, push_pull_workspace_sync_for_root,
     push_pull_workspace_sync_for_root_with_client, push_pull_workspace_sync_with_client,
     resolve_workspace_sync_conflict, resolve_workspace_sync_conflict_with_client,
-};
-pub use lattice_sync::{
-    ConflictResolution, ExecuteOutcome, ExecuteResult, SyncRunReport, SyncStatus,
 };

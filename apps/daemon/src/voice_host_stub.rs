@@ -16,7 +16,9 @@ pub const ENV_VOICE_MODEL_CACHE: &str = "LATTICE_VOICE_MODEL_CACHE";
 
 #[derive(Debug, Clone)]
 pub enum VoiceProviderMode {
-    ExternalSocket { socket: PathBuf },
+    ExternalSocket {
+        socket: PathBuf,
+    },
     SpawnHost {
         binary: PathBuf,
         socket: PathBuf,

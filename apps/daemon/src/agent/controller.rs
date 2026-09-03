@@ -207,7 +207,8 @@ impl AgentController {
             "fake" => "fake".into(),
             _ => self.default_provider().as_str().to_string(),
         };
-        if self.default_provider() == ProviderKind::Local && !super::sidecar::local_llm_configured() {
+        if self.default_provider() == ProviderKind::Local && !super::sidecar::local_llm_configured()
+        {
             health.ok = false;
         }
         health.degraded = health.degraded || self.is_degraded();

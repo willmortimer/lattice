@@ -183,12 +183,10 @@ async fn agent_threads_crud_round_trip_with_token() {
         .await
         .unwrap();
     assert_eq!(hidden.status(), StatusCode::OK);
-    assert!(
-        body_json(hidden).await["threads"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    assert!(body_json(hidden).await["threads"]
+        .as_array()
+        .unwrap()
+        .is_empty());
 
     let shown = app
         .clone()

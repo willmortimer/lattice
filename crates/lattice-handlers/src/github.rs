@@ -22,9 +22,8 @@ fn token_store() -> &'static dyn TokenStore {
     static MEMORY: OnceLock<MemoryTokenStore> = OnceLock::new();
     static USE_MEMORY: OnceLock<bool> = OnceLock::new();
 
-    let use_memory = *USE_MEMORY.get_or_init(|| {
-        !probe_token_store_writable(GITHUB_TOKEN_SERVICE, GITHUB_PROBE_KEY)
-    });
+    let use_memory = *USE_MEMORY
+        .get_or_init(|| !probe_token_store_writable(GITHUB_TOKEN_SERVICE, GITHUB_PROBE_KEY));
     if use_memory {
         MEMORY.get_or_init(MemoryTokenStore::new)
     } else {

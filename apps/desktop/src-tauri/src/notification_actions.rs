@@ -21,8 +21,14 @@ struct OpenResourcePayload {
 pub fn handle_action(app: &AppHandle, action: &str, context: &serde_json::Value) {
     match action {
         ACTION_CAPTURE_OPEN => {
-            let root = context.get("root").and_then(|value| value.as_str()).unwrap_or("");
-            let path = context.get("path").and_then(|value| value.as_str()).unwrap_or("");
+            let root = context
+                .get("root")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let path = context
+                .get("path")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
             if root.is_empty() || path.is_empty() {
                 eprintln!("lattice: notification action {action} missing root/path");
                 return;
@@ -57,9 +63,7 @@ pub fn build_capture_open_url(root: &str, page_path: &str) -> String {
 /// Log a capture-ingested notification stub (UNUserNotificationCenter wiring is follow-up).
 pub fn post_capture_ingested(app: &AppHandle, root: &str, page_path: &str) {
     let open_url = build_capture_open_url(root, page_path);
-    eprintln!(
-        "lattice notification stub: screen clip saved to {page_path} — open via {open_url}"
-    );
+    eprintln!("lattice notification stub: screen clip saved to {page_path} — open via {open_url}");
     let _ = app;
 }
 
