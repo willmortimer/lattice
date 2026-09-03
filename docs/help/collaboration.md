@@ -1,31 +1,30 @@
 ---
-title: Collaborative pages and boards
-description: Shared editing on pages and canvases with a resource ID.
+title: Collaborative pages
+description: Shared editing on pages with a resource ID.
 ---
 
-# Collaborative pages and boards
+# Collaborative pages
 
-By default, pages and canvases save as ordinary workspace files (**Plain file**).
-Items that have a registry **Resource ID** can switch to **Collaborative** mode
-for live co-editing.
+By default, pages save as a normal markdown file on disk (**Plain file**). Pages
+that have a registry **Resource ID** can switch to **Collaborative** mode for
+live co-editing.
 
 ## Plain file vs Collaborative
 
-Open a page or canvas that has a resource ID. In the toolbar you will see:
+Open a page that has a resource ID. In the page toolbar you will see:
 
 | Mode | Behavior |
 | --- | --- |
-| **Plain file** | Pages save markdown; canvases apply JSON Canvas patches to the `.canvas` file |
-| **Collaborative** | Live shared editing through the Yrs journal (not per-keystroke file writes) |
+| **Plain file** | Standard markdown editing; saves to the file on disk |
+| **Collaborative** | Live shared editing (not the same as autosaved markdown) |
 
-Switch with the **Plain file** / **Collaborative** toggles in the page chrome or
-the canvas toolbar.
+Switch with the **Plain file** / **Collaborative** toggles above the editor.
 
-Your choice is remembered when you reopen the item in the same workspace, as
-long as it still has a resource ID. Switching back to **Plain file** is
+Your choice is remembered when you reopen the page in the same workspace, as
+long as the page still has a resource ID. Switching back to **Plain file** is
 remembered the same way.
 
-In **Collaborative** mode on pages, a **Comments** button may appear for inline
+In **Collaborative** mode, a **Comments** button may appear for inline
 discussion.
 
 **Inspect → properties** shows **Editing authority** with the same labels
@@ -34,8 +33,8 @@ discussion.
 
 ## When Collaborative is not offered
 
-The toggles only appear when the item already has a resource ID in Inspect →
-**properties**. New or unregistered files stay on **Plain file** until the
+The toggles only appear when the page already has a resource ID in Inspect →
+**properties**. New or unregistered pages stay on **Plain file** until the
 registry assigns an ID.
 
 ## Cloud catch-up

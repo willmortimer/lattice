@@ -15,5 +15,3 @@ Boards/Map.canvas.lattice.yaml   # optional profile sidecar (when present)
 - `.canvas` files should remain valid JSON Canvas for other tools.
 - Lattice-specific behavior belongs in documented profile fields, not in
   breaking the base canvas schema.
-- Collaborative canvases journal live structure in a Y.Doc keyed by
-  `ResourceId` and materialize this JSON Canvas file on checkpoint/idle/close.
