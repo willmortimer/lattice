@@ -48,3 +48,7 @@ paused until the run finishes.
 Model and API options live under **Settings → AI** (gear on the activity rail).
 Sign in under **Settings → Cloud account** when a cloud-backed provider
 requires it.
+
+To connect Cursor or Claude Desktop, open **Settings → Plugins** and copy MCP
+config, the loopback URL, or the cloud connector. See
+[Connect an agent](mcp-agents.md).

@@ -3,6 +3,11 @@
 > Public, agent-oriented index of Lattice workspace formats.
 > Human docs: https://lattice-notes.com/docs/
 > This pack: https://lattice-notes.com/open/
+> Full concatenated reference: https://lattice-notes.com/llms-full.txt
+
+## Full reference
+
+- Concatenated contracts + open packs: /llms-full.txt
 
 ## Contracts
 

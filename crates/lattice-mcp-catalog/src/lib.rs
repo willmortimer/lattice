@@ -8,10 +8,12 @@
 //! single source of truth for which runtime executes each one, so a future
 //! gateway can route `tools/call` without duplicating name tables.
 //!
-//! This crate is intentionally inert: it has no I/O, no transport, and no
-//! dispatcher trait. It only describes tool names, schemas, and routing.
-//! Relay request/response types are shared JSON shapes for the outbound
-//! device tunnel (not MCP itself).
+//! Tool catalog types are inert (no transport). Agent Plugin packaging may
+//! write `plugin.json` / `mcp.json` trees to disk.
+
+pub mod agent_plugin;
+pub mod lattice_docs;
+pub mod mcp_apps;
 
 use std::sync::LazyLock;
 
@@ -86,6 +88,11 @@ pub const TOOL_WORKSPACE_PUBLISH: &str = "workspace.publish";
 pub const TOOL_WORKSPACE_BACKUP_LIST: &str = "workspace.backup_list";
 /// Store an opaque client-encrypted backup blob. Cloud-only.
 pub const TOOL_WORKSPACE_BACKUP_PUT: &str = "workspace.backup_put";
+/// List workspaces. Local MCP: device registry (`workspaceId` + `root`).
+/// Cloud MCP: cloud workspaces (`workspaceId` + `name`). No device required.
+pub const TOOL_WORKSPACE_LIST: &str = "workspace.list";
+/// Public contract Markdown (also `lattice://docs/...` resources).
+pub const TOOL_WORKSPACE_GET_DOCS: &str = crate::lattice_docs::TOOL_WORKSPACE_GET_DOCS;
 
 /// Where a tool's `tools/call` invocation must execute.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -460,6 +467,29 @@ fn build_tool_specs() -> Vec<ToolSpec> {
             required: vec!["path".to_string(), "content".to_string()],
         },
         ToolSpec {
+            name: TOOL_WORKSPACE_LIST,
+            description: "List Lattice workspaces. Local MCP returns the device registry (workspaceId + filesystem root). Cloud MCP returns cloud workspaces (workspaceId + name). Call this first when workspaceId/root is unknown.",
+            target: ExecutionTarget::Cloud,
+            params: vec![],
+            required: vec![],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_GET_DOCS,
+            description: "Return public Lattice contract Markdown. topic is empty or list for the catalog; cli, mcp, api, formats, integrations, or index for a page.",
+            target: ExecutionTarget::Cloud,
+            params: vec![
+                ToolParam {
+                    name: "topic".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({
+                        "type": "string",
+                        "description": "Topic id (list, index, cli, mcp, api, formats, integrations)"
+                    }),
+                },
+            ],
+            required: vec![],
+        },
+        ToolSpec {
             name: TOOL_WORKSPACE_SHARE,
             description: "Create a read-only share token for a cloud workspace.",
             target: ExecutionTarget::Cloud,
@@ -541,7 +571,8 @@ fn build_tool_specs() -> Vec<ToolSpec> {
     ]
 }
 
-static TOOL_SPECS: LazyLock<Box<[ToolSpec]>> = LazyLock::new(|| build_tool_specs().into_boxed_slice());
+static TOOL_SPECS: LazyLock<Box<[ToolSpec]>> =
+    LazyLock::new(|| build_tool_specs().into_boxed_slice());
 
 fn all_tool_specs() -> &'static [ToolSpec] {
     &TOOL_SPECS
@@ -550,13 +581,35 @@ fn all_tool_specs() -> &'static [ToolSpec] {
 /// Namespace prefixes reserved for cloud-owned tools, so future additions
 /// under `workspace.backup.*` / `workspace.share.*` / `workspace.publish.*`
 /// route to the cloud without touching the catalog table.
-const CLOUD_TOOL_PREFIXES: &[&str] = &["workspace.backup.", "workspace.share.", "workspace.publish."];
+const CLOUD_TOOL_PREFIXES: &[&str] = &[
+    "workspace.backup.",
+    "workspace.share.",
+    "workspace.publish.",
+];
 
 /// Look up the canonical [`ToolSpec`] for a known tool name.
 ///
-/// Returns [`None`] for unknown names (fail closed).
+/// Returns [`None`] for unknown names (fail closed). Does not rewrite
+/// underscore aliases; call [`canonical_tool_name`] first when the host may
+/// have replaced `.` with `_` (Cursor `tools/call`).
 pub fn tool_spec(name: &str) -> Option<&'static ToolSpec> {
     all_tool_specs().iter().find(|spec| spec.name == name)
+}
+
+/// Map host-mangled tool names back to catalog names.
+///
+/// Some hosts replace `.` with `_` in `tools/call` (`workspace_list` for
+/// `workspace.list`). Already-canonical names and short aliases (`search`,
+/// `propose_page`) are returned unchanged so existing match arms still work.
+pub fn canonical_tool_name(name: &str) -> &str {
+    if tool_spec(name).is_some() {
+        return name;
+    }
+    all_tool_specs()
+        .iter()
+        .find(|spec| spec.name.replace('.', "_") == name)
+        .map(|spec| spec.name)
+        .unwrap_or(name)
 }
 
 /// Determine which runtime must execute a `tools/call` for `name`.
@@ -566,10 +619,14 @@ pub fn tool_spec(name: &str) -> Option<&'static ToolSpec> {
 /// resolve to [`ExecutionTarget::Cloud`] even when not yet cataloged.
 /// Unknown names return [`None`] (fail closed).
 pub fn execution_target(name: &str) -> Option<ExecutionTarget> {
+    let name = canonical_tool_name(name);
     if let Some(spec) = tool_spec(name) {
         return Some(spec.target);
     }
-    if CLOUD_TOOL_PREFIXES.iter().any(|prefix| name.starts_with(prefix)) {
+    if CLOUD_TOOL_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix) || name.replace('_', ".").starts_with(prefix))
+    {
         return Some(ExecutionTarget::Cloud);
     }
     None
@@ -579,10 +636,20 @@ pub fn execution_target(name: &str) -> Option<ExecutionTarget> {
 /// subset, e.g. for the daemon's stdio MCP adapter. Order is deterministic
 /// across calls. Callers that want cache metadata (e.g. `ttlMs`) should wrap
 /// this value themselves; this crate stays transport-agnostic.
+///
+/// Includes cloud-owned `workspace.list` and `workspace.get_lattice_docs` so
+/// a local stdio client can discover workspaces and public contracts without
+/// a cloud hop.
+fn exposed_on_local_stdio(spec: &ToolSpec) -> bool {
+    spec.target == ExecutionTarget::Device
+        || spec.name == TOOL_WORKSPACE_LIST
+        || spec.name == TOOL_WORKSPACE_GET_DOCS
+}
+
 pub fn local_tools() -> Value {
     let tools: Vec<Value> = all_tool_specs()
         .iter()
-        .filter(|spec| spec.target == ExecutionTarget::Device)
+        .filter(|spec| exposed_on_local_stdio(spec))
         .map(ToolSpec::local_descriptor)
         .collect();
     json!({ "tools": tools })
@@ -658,7 +725,7 @@ mod tests {
     #[test]
     fn local_tools_has_expected_count_and_names() {
         let names = tool_names(&local_tools());
-        assert_eq!(names.len(), 14);
+        assert_eq!(names.len(), 16);
         assert_eq!(
             names,
             vec![
@@ -676,6 +743,8 @@ mod tests {
                 TOOL_WORKSPACE_PROPOSAL_PROPOSE_WORKFLOW,
                 TOOL_WORKSPACE_PROPOSAL_PROPOSE_INTERFACE,
                 TOOL_WORKSPACE_PROPOSAL_PROPOSE_ARTIFACT,
+                TOOL_WORKSPACE_LIST,
+                TOOL_WORKSPACE_GET_DOCS,
             ]
         );
     }
@@ -778,6 +847,30 @@ mod tests {
     }
 
     #[test]
+    fn canonical_tool_name_rewrites_underscore_host_aliases() {
+        assert_eq!(canonical_tool_name("workspace_list"), TOOL_WORKSPACE_LIST);
+        assert_eq!(canonical_tool_name("workspace_read"), TOOL_WORKSPACE_READ);
+        assert_eq!(
+            canonical_tool_name("workspace_proposal_propose_page"),
+            TOOL_WORKSPACE_PROPOSAL_PROPOSE_PAGE
+        );
+        assert_eq!(
+            canonical_tool_name(TOOL_WORKSPACE_LIST),
+            TOOL_WORKSPACE_LIST
+        );
+        assert_eq!(canonical_tool_name("search"), "search");
+        assert_eq!(canonical_tool_name("propose_page"), "propose_page");
+        assert_eq!(
+            execution_target("workspace_list"),
+            Some(ExecutionTarget::Cloud)
+        );
+        assert_eq!(
+            execution_target("workspace_read"),
+            Some(ExecutionTarget::Device)
+        );
+    }
+
+    #[test]
     fn execution_target_maps_device_tools_to_device() {
         assert_eq!(
             execution_target(TOOL_WORKSPACE_SEARCH),
@@ -791,17 +884,28 @@ mod tests {
             execution_target(TOOL_WORKSPACE_PROPOSAL_CREATE),
             Some(ExecutionTarget::Device)
         );
+        assert_eq!(
+            execution_target(TOOL_WORKSPACE_LIST),
+            Some(ExecutionTarget::Cloud)
+        );
+        assert_eq!(
+            execution_target(TOOL_WORKSPACE_GET_DOCS),
+            Some(ExecutionTarget::Cloud)
+        );
     }
 
     #[test]
     fn local_device_tools_include_root_parameter() {
         let tools = local_tools();
         for tool in tools["tools"].as_array().unwrap() {
+            let name = tool["name"].as_str().unwrap();
+            if name == TOOL_WORKSPACE_LIST || name == TOOL_WORKSPACE_GET_DOCS {
+                continue;
+            }
             let keys = schema_property_keys(tool);
             assert!(
                 keys.contains(&"root".to_string()),
-                "local tool {} missing root parameter",
-                tool["name"]
+                "local tool {name} missing root parameter"
             );
             assert!(keys.contains(&"workspaceId".to_string()));
         }
@@ -818,7 +922,12 @@ mod tests {
                     !keys.contains(&"root".to_string()),
                     "remote tool {name} must not expose root"
                 );
-                assert!(keys.contains(&"workspaceId".to_string()));
+                if name != TOOL_WORKSPACE_LIST {
+                    assert!(
+                        keys.contains(&"workspaceId".to_string()),
+                        "remote tool {name} missing workspaceId"
+                    );
+                }
             }
         }
     }

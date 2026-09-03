@@ -12,35 +12,34 @@ mod capture;
 #[cfg(not(feature = "capture"))]
 mod capture_permission_stub;
 mod cloud;
-mod workspace_backup;
-mod workspace_sync;
 mod collab;
 mod collab_remote;
 mod commands;
 mod daemon_session;
-mod deck;
 mod data;
-mod deep_link;
-mod demo_driver;
-mod deck_export;
 mod dataset;
 mod dataset_sessions;
-mod derived;
+mod deck;
+mod deck_export;
 mod deck_views;
+mod deep_link;
+mod demo_driver;
+mod derived;
+mod finder_service;
 mod github;
 mod gitlab;
 mod kernel;
 mod link_repair;
+mod mcp_connect;
 mod notification_actions;
 mod open_file;
-mod finder_service;
 mod presence;
 mod profile;
 mod proposals;
 mod relationship;
+mod remote_access;
 mod resource_links;
 mod resource_stat;
-mod remote_access;
 mod revisions;
 mod scheduler;
 mod search;
@@ -53,8 +52,10 @@ mod tray;
 mod voice;
 mod watcher;
 mod workflow;
+mod workspace_backup;
 mod workspace_catalog;
 mod workspace_root;
+mod workspace_sync;
 
 use std::path::Path;
 
@@ -67,13 +68,11 @@ pub fn run() {
     // Register first so second-instance argv (Windows SIWA) reaches the running process.
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(
-            |app, args, _cwd| {
-                let urls = deep_link::deep_link_urls_from_argv(&args);
-                handle_deep_link_urls(app, urls);
-                show_and_focus_main(app);
-            },
-        ));
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let urls = deep_link::deep_link_urls_from_argv(&args);
+            handle_deep_link_urls(app, urls);
+            show_and_focus_main(app);
+        }));
     }
 
     let builder = builder
@@ -401,6 +400,8 @@ pub fn run() {
             cloud::product_telemetry_emit,
             cloud::cloud_blob_materialize,
             cloud::cloud_blob_open,
+            mcp_connect::mcp_connect_info,
+            mcp_connect::write_agent_plugin_dir,
             workspace_backup::workspace_crypto_status_cmd,
             workspace_backup::workspace_crypto_unlock_cmd,
             workspace_backup::workspace_crypto_lock_cmd,

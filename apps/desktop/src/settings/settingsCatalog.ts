@@ -407,8 +407,36 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
     id: "plugins.catalog",
     section: "plugins",
     title: "Plugins",
-    description: "Third-party shell extensions.",
-    keywords: ["extensions", "third party"],
+    description: "MCP copy-config, loopback URL, cloud connector, and Agent Plugin export.",
+    keywords: ["extensions", "third party", "mcp", "agent plugin"],
+  },
+  {
+    id: "plugins.mcp-stdio",
+    section: "plugins",
+    title: "Local stdio config",
+    description: "Copy latticed mcp JSON for Cursor or Claude Desktop.",
+    keywords: ["mcp", "cursor", "claude", "stdio"],
+  },
+  {
+    id: "plugins.mcp-loopback",
+    section: "plugins",
+    title: "Loopback URL",
+    description: "http://127.0.0.1:18787/mcp for a running latticed.",
+    keywords: ["mcp", "loopback", "127.0.0.1", "http"],
+  },
+  {
+    id: "plugins.mcp-cloud",
+    section: "plugins",
+    title: "Cloud connector",
+    description: "Copy Lattice Cloud MCP URL and OAuth well-known discovery.",
+    keywords: ["mcp", "cloud", "oauth", "claude", "cursor"],
+  },
+  {
+    id: "plugins.agent-plugin",
+    section: "plugins",
+    title: "Save Agent Plugin folder",
+    description: "Write Agent Plugins 1.0 plugin.json and mcp.json packages.",
+    keywords: ["agent plugins", "plugin.json", "mcp.json", "packaging"],
   },
   {
     id: "ai.mode",
@@ -602,6 +630,7 @@ const SETTINGS_DEEP_LINK_ALIASES: Record<string, string> = {
   "ai/provider": "ai.mode",
   "search/semantic": "search.semantic",
   "remote-access": "remote.access",
+  "plugins/mcp": "plugins.mcp-stdio",
 };
 
 function catalogItemById(id: string) {

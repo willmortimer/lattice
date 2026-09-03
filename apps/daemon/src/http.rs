@@ -32,11 +32,11 @@ use crate::api::{
     api_build_context, api_cancel_job, api_cloud_blob_open, api_create_proposal,
     api_get_dataset_schema, api_get_job, api_get_proposal, api_list_active_jobs,
     api_list_proposals, api_list_recent_jobs, api_profile_dataset, api_propose_artifact,
-    api_propose_interface, api_propose_page, api_propose_resource, api_propose_workflow,
-    api_read, api_related, api_resource_stat, api_search, ApiError, BuildContextParams,
-    CancelJobParams, CreateProposalParams, DatasetInspectParams, GetJobParams, GetProposalParams,
-    ListJobsParams, ListProposalsParams, ProposePageParams, ProposeResourceParams,
-    ProposeYamlParams, ReadParams, RelatedParams, ResourcePathParams, SearchParams,
+    api_propose_interface, api_propose_page, api_propose_resource, api_propose_workflow, api_read,
+    api_related, api_resource_stat, api_search, ApiError, BuildContextParams, CancelJobParams,
+    CreateProposalParams, DatasetInspectParams, GetJobParams, GetProposalParams, ListJobsParams,
+    ListProposalsParams, ProposePageParams, ProposeResourceParams, ProposeYamlParams, ReadParams,
+    RelatedParams, ResourcePathParams, SearchParams,
 };
 use crate::config::DaemonConfig;
 use crate::mcp;
@@ -44,11 +44,11 @@ use crate::scheduler_api::{
     api_scheduler_list, api_scheduler_register, api_scheduler_set_enabled,
     api_scheduler_unregister, SchedulerSetEnabledParams, SchedulerWorkspaceParams,
 };
+use crate::server::DaemonState;
 use crate::workspace_api::{
     api_workspace_list_registry, api_workspace_list_remote_access, api_workspace_set_remote_access,
     WorkspaceRemoteAccessParams,
 };
-use crate::server::DaemonState;
 
 const AUTH_HEADER: &str = "x-lattice-token";
 
@@ -728,13 +728,49 @@ async fn route_mcp(
     }
 }
 
+/// Streamable HTTP GET probe. Returns an empty SSE comment when the client
+/// asks for `text/event-stream`; otherwise 405. This is not a full MCP
+/// session stream (no server-initiated JSON-RPC on GET).
+async fn route_mcp_sse(headers: HeaderMap) -> Response {
+    streamable_http_sse_probe(&headers)
+}
+
+fn streamable_http_sse_probe(headers: &HeaderMap) -> Response {
+    let accept = headers
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("");
+    let wants_sse = accept.split(',').any(|part| {
+        part.split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .eq_ignore_ascii_case("text/event-stream")
+    });
+    if !wants_sse {
+        return StatusCode::METHOD_NOT_ALLOWED.into_response();
+    }
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/event-stream; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        ": connected\n\n",
+    )
+        .into_response()
+}
+
 /// Build the localhost API router (no CORS — not a browser demo surface).
 pub fn router(daemon: DaemonState) -> Router {
     Router::new()
         .route("/health", get(health))
-        .route("/mcp", post(route_mcp))
+        .route("/mcp", get(route_mcp_sse).post(route_mcp))
         .route("/v1/search", post(route_search))
-        .route("/v1/agent_memory/remember", post(route_agent_memory_remember))
+        .route(
+            "/v1/agent_memory/remember",
+            post(route_agent_memory_remember),
+        )
         .route("/v1/agent_memory/recall", post(route_agent_memory_recall))
         .route("/v1/agent_memory/delete", post(route_agent_memory_delete))
         .route(
@@ -775,7 +811,10 @@ pub fn router(daemon: DaemonState) -> Router {
             post(route_scheduler_set_enabled),
         )
         .route("/v1/scheduler/list", post(route_scheduler_list))
-        .route("/v1/workspace/list_registry", post(route_workspace_list_registry))
+        .route(
+            "/v1/workspace/list_registry",
+            post(route_workspace_list_registry),
+        )
         .route(
             "/v1/workspace/list_remote_access",
             post(route_workspace_list_remote_access),

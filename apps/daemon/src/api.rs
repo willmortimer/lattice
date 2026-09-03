@@ -72,6 +72,23 @@ impl std::fmt::Display for ApiError {
     }
 }
 
+/// Who is consuming workspace bytes. HTTP `/v1/*` stays [`ExportAudience::Export`];
+/// local stdio/loopback MCP uses [`ExportAudience::OwnerAgent`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ExportAudience {
+    /// Third-party export: `ask`/`deny`/`private` redacted; `secret` forbidden.
+    #[default]
+    Export,
+    /// Local owner agent: same pages the in-app agent can see. `secret` still forbidden.
+    OwnerAgent,
+}
+
+impl ExportAudience {
+    fn redact_ask_private_deny(self) -> bool {
+        matches!(self, Self::Export)
+    }
+}
+
 fn clamp_limit(limit: Option<usize>) -> usize {
     limit.unwrap_or(DEFAULT_HIT_LIMIT).clamp(1, MAX_HIT_LIMIT)
 }
@@ -99,10 +116,23 @@ pub fn resolve_session(
     }
     let root = root
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| ApiError::BadRequest("workspaceId or root is required".into()))?;
+        .map(str::to_string)
+        .or_else(default_mcp_workspace_root)
+        .ok_or_else(|| {
+            ApiError::BadRequest(
+                "workspaceId or root is required (or set LATTICE_WORKSPACE_ROOT)".into(),
+            )
+        })?;
     runtime
         .open_workspace_session(PathBuf::from(root))
         .map_err(|err| ApiError::BadRequest(err.to_string()))
+}
+
+fn default_mcp_workspace_root() -> Option<String> {
+    std::env::var("LATTICE_WORKSPACE_ROOT")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -163,6 +193,14 @@ pub fn api_search(
     runtime: &LatticeRuntime,
     params: SearchParams,
 ) -> Result<SearchResponse, ApiError> {
+    api_search_for(runtime, params, ExportAudience::Export)
+}
+
+pub fn api_search_for(
+    runtime: &LatticeRuntime,
+    params: SearchParams,
+    audience: ExportAudience,
+) -> Result<SearchResponse, ApiError> {
     if params.query.trim().is_empty() {
         return Err(ApiError::BadRequest("query must not be empty".into()));
     }
@@ -195,6 +233,7 @@ pub fn api_search(
                     hit.snippet.as_deref().unwrap_or(""),
                     sensitivity,
                     export_policy,
+                    audience,
                 );
                 hits.push(SearchHitDto {
                     path,
@@ -217,7 +256,9 @@ pub fn api_search(
         "hybrid" => {
             let raw = hybrid_search_with_session_semantic(&session, &params.query, limit)
                 .map_err(|err| ApiError::Internal(err.to_string()))?;
-            raw.into_iter().map(hybrid_hit_to_dto).collect()
+            raw.into_iter()
+                .map(|hit| hybrid_hit_to_dto(hit, audience))
+                .collect()
         }
         other => {
             return Err(ApiError::BadRequest(format!(
@@ -233,9 +274,9 @@ pub fn api_search(
     })
 }
 
-fn hybrid_hit_to_dto(hit: HybridSearchHit) -> SearchHitDto {
+fn hybrid_hit_to_dto(hit: HybridSearchHit, audience: ExportAudience) -> SearchHitDto {
     let (excerpt, redacted) =
-        redact_excerpt_for_export(&hit.excerpt, hit.sensitivity, hit.export_policy);
+        redact_excerpt_for_export(&hit.excerpt, hit.sensitivity, hit.export_policy, audience);
     SearchHitDto {
         path: resource_path_from_uri(&hit.resource_uri),
         title: hit.title,
@@ -266,7 +307,14 @@ fn redact_excerpt_for_export(
     excerpt: &str,
     sensitivity: Sensitivity,
     policy: ExportPolicy,
+    audience: ExportAudience,
 ) -> (Option<String>, bool) {
+    if !audience.redact_ask_private_deny() {
+        if excerpt.is_empty() {
+            return (None, false);
+        }
+        return (Some(excerpt.to_string()), false);
+    }
     match sensitivity {
         Sensitivity::Secret => (None, true),
         Sensitivity::Private => (None, true),
@@ -349,6 +397,14 @@ pub struct ReadResponse {
 }
 
 pub fn api_read(runtime: &LatticeRuntime, params: ReadParams) -> Result<ReadResponse, ApiError> {
+    api_read_for(runtime, params, ExportAudience::Export)
+}
+
+pub fn api_read_for(
+    runtime: &LatticeRuntime,
+    params: ReadParams,
+    audience: ExportAudience,
+) -> Result<ReadResponse, ApiError> {
     if params.path.trim().is_empty() {
         return Err(ApiError::BadRequest("path must not be empty".into()));
     }
@@ -388,8 +444,9 @@ pub fn api_read(runtime: &LatticeRuntime, params: ReadParams) -> Result<ReadResp
             "resource is secret and cannot be exported via the context API".into(),
         ));
     }
-    if sensitivity == Sensitivity::Private
-        || matches!(export_policy, ExportPolicy::Deny | ExportPolicy::Ask)
+    if audience.redact_ask_private_deny()
+        && (sensitivity == Sensitivity::Private
+            || matches!(export_policy, ExportPolicy::Deny | ExportPolicy::Ask))
     {
         return Ok(ReadResponse {
             workspace_id: session.workspace_id().to_string(),
@@ -479,6 +536,14 @@ pub fn api_related(
     runtime: &LatticeRuntime,
     params: RelatedParams,
 ) -> Result<RelatedResponse, ApiError> {
+    api_related_for(runtime, params, ExportAudience::Export)
+}
+
+pub fn api_related_for(
+    runtime: &LatticeRuntime,
+    params: RelatedParams,
+    audience: ExportAudience,
+) -> Result<RelatedResponse, ApiError> {
     if params.path.trim().is_empty() {
         return Err(ApiError::BadRequest("path must not be empty".into()));
     }
@@ -536,6 +601,7 @@ pub fn api_related(
                     hit.snippet.as_deref().unwrap_or(""),
                     sensitivity,
                     export_policy,
+                    audience,
                 );
                 hits.push(RelatedHitDto {
                     path,
@@ -607,6 +673,14 @@ pub fn api_build_context(
     runtime: &LatticeRuntime,
     params: BuildContextParams,
 ) -> Result<BuildContextResponse, ApiError> {
+    api_build_context_for(runtime, params, ExportAudience::Export)
+}
+
+pub fn api_build_context_for(
+    runtime: &LatticeRuntime,
+    params: BuildContextParams,
+    audience: ExportAudience,
+) -> Result<BuildContextResponse, ApiError> {
     if params.query.trim().is_empty() {
         return Err(ApiError::BadRequest("query must not be empty".into()));
     }
@@ -630,9 +704,10 @@ pub fn api_build_context(
     let mut omitted = 0usize;
 
     for hit in hits {
+        let redact = audience.redact_ask_private_deny();
         // Secret never reaches here (filtered at hydration). Private is local-only:
         // treat like ask for export context assembly.
-        if hit.sensitivity == Sensitivity::Private {
+        if redact && hit.sensitivity == Sensitivity::Private {
             omitted += 1;
             excerpts.push(ContextExcerpt {
                 path: resource_path_from_uri(&hit.resource_uri),
@@ -655,74 +730,71 @@ pub fn api_build_context(
             });
             continue;
         }
-        match hit.export_policy {
-            ExportPolicy::Deny => {
-                omitted += 1;
-                continue;
+        if redact && hit.export_policy == ExportPolicy::Deny {
+            omitted += 1;
+            continue;
+        }
+        if redact && hit.export_policy == ExportPolicy::Ask {
+            // Do not exfiltrate freely: include a consent-flagged stub without text.
+            omitted += 1;
+            excerpts.push(ContextExcerpt {
+                path: resource_path_from_uri(&hit.resource_uri),
+                title: hit.title,
+                excerpt: None,
+                export_policy: ExportPolicy::Ask.as_str().to_string(),
+                export_redacted: true,
+                needs_consent: true,
+                provenance: Some(ProvenanceDto {
+                    content_hash: hit.provenance.content_hash,
+                    chunker_version: hit.provenance.chunker_version,
+                    namespace_key: hit.provenance.namespace_key,
+                    model_id: hit.provenance.model_id,
+                    model_revision: hit.provenance.model_revision,
+                    instruction_version: hit.provenance.instruction_version,
+                }),
+                block_id: hit.block_id.clone(),
+                source_start_byte: Some(hit.source_start_byte),
+                source_end_byte: Some(hit.source_end_byte),
+            });
+            continue;
+        }
+        let mut text = hit.excerpt;
+        let remaining = max_bytes.saturating_sub(total_bytes);
+        if remaining == 0 {
+            truncated = true;
+            break;
+        }
+        if text.len() > remaining {
+            // Truncate on a char boundary.
+            let mut end = remaining;
+            while end > 0 && !text.is_char_boundary(end) {
+                end -= 1;
             }
-            ExportPolicy::Ask => {
-                // Do not exfiltrate freely: include a consent-flagged stub without text.
-                omitted += 1;
-                excerpts.push(ContextExcerpt {
-                    path: resource_path_from_uri(&hit.resource_uri),
-                    title: hit.title,
-                    excerpt: None,
-                    export_policy: ExportPolicy::Ask.as_str().to_string(),
-                    export_redacted: true,
-                    needs_consent: true,
-                    provenance: Some(ProvenanceDto {
-                        content_hash: hit.provenance.content_hash,
-                        chunker_version: hit.provenance.chunker_version,
-                        namespace_key: hit.provenance.namespace_key,
-                        model_id: hit.provenance.model_id,
-                        model_revision: hit.provenance.model_revision,
-                        instruction_version: hit.provenance.instruction_version,
-                    }),
-                    block_id: hit.block_id.clone(),
-                    source_start_byte: Some(hit.source_start_byte),
-                    source_end_byte: Some(hit.source_end_byte),
-                });
-            }
-            ExportPolicy::Allow => {
-                let mut text = hit.excerpt;
-                let remaining = max_bytes.saturating_sub(total_bytes);
-                if remaining == 0 {
-                    truncated = true;
-                    break;
-                }
-                if text.len() > remaining {
-                    // Truncate on a char boundary.
-                    let mut end = remaining;
-                    while end > 0 && !text.is_char_boundary(end) {
-                        end -= 1;
-                    }
-                    text.truncate(end);
-                    truncated = true;
-                }
-                total_bytes += text.len();
-                excerpts.push(ContextExcerpt {
-                    path: resource_path_from_uri(&hit.resource_uri),
-                    title: hit.title,
-                    excerpt: Some(text),
-                    export_policy: ExportPolicy::Allow.as_str().to_string(),
-                    export_redacted: false,
-                    needs_consent: false,
-                    provenance: Some(ProvenanceDto {
-                        content_hash: hit.provenance.content_hash,
-                        chunker_version: hit.provenance.chunker_version,
-                        namespace_key: hit.provenance.namespace_key,
-                        model_id: hit.provenance.model_id,
-                        model_revision: hit.provenance.model_revision,
-                        instruction_version: hit.provenance.instruction_version,
-                    }),
-                    block_id: hit.block_id.clone(),
-                    source_start_byte: Some(hit.source_start_byte),
-                    source_end_byte: Some(hit.source_end_byte),
-                });
-                if truncated {
-                    break;
-                }
-            }
+            text.truncate(end);
+            truncated = true;
+        }
+        total_bytes += text.len();
+        excerpts.push(ContextExcerpt {
+            path: resource_path_from_uri(&hit.resource_uri),
+            title: hit.title,
+            excerpt: Some(text),
+            export_policy: hit.export_policy.as_str().to_string(),
+            export_redacted: false,
+            needs_consent: false,
+            provenance: Some(ProvenanceDto {
+                content_hash: hit.provenance.content_hash,
+                chunker_version: hit.provenance.chunker_version,
+                namespace_key: hit.provenance.namespace_key,
+                model_id: hit.provenance.model_id,
+                model_revision: hit.provenance.model_revision,
+                instruction_version: hit.provenance.instruction_version,
+            }),
+            block_id: hit.block_id.clone(),
+            source_start_byte: Some(hit.source_start_byte),
+            source_end_byte: Some(hit.source_end_byte),
+        });
+        if truncated {
+            break;
         }
     }
 
@@ -1514,6 +1586,36 @@ mod tests {
             },
         );
         assert!(matches!(secret, Err(ApiError::Forbidden(_))));
+
+        let owner_read = api_read_for(
+            &runtime,
+            ReadParams {
+                workspace_id: Some(session.workspace_id().to_string()),
+                root: None,
+                path: "Ask.md".into(),
+                start_byte: None,
+                end_byte: None,
+                max_bytes: None,
+            },
+            ExportAudience::OwnerAgent,
+        )
+        .unwrap();
+        assert!(!owner_read.export_redacted);
+        assert!(owner_read.content.contains("ask-token-xyz"));
+
+        let owner_secret = api_read_for(
+            &runtime,
+            ReadParams {
+                workspace_id: Some(session.workspace_id().to_string()),
+                root: None,
+                path: "Secret.md".into(),
+                start_byte: None,
+                end_byte: None,
+                max_bytes: None,
+            },
+            ExportAudience::OwnerAgent,
+        );
+        assert!(matches!(owner_secret, Err(ApiError::Forbidden(_))));
     }
 
     #[test]
@@ -1708,8 +1810,7 @@ mod tests {
         let root = dir.path().to_string_lossy().into_owned();
         let digest = lattice_commands::HydrationInputDigest {
             path: "hello.txt".into(),
-            content_hash: "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5"
-                .into(),
+            content_hash: "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5".into(),
             resource_id: Some("res-fixture-1".into()),
         };
 

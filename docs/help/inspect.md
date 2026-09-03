@@ -34,7 +34,7 @@ Use the tabs across the top of Inspect:
 | **diagnostics** | Errors and reconciliation status |
 
 **Authority** tells you who owns the canonical copy (for example **Local** or
-**Cloud**). **Editing authority** shows how the page or canvas is being edited:
+**Cloud**). **Editing authority** shows how the page is being edited:
 **Plain file** or **Collaborative**. That is separate from **Authority** — it
 does not mean the file is backed up to the cloud. **Materialization** tells you
 how much of the file is present on disk (for example **Cached** or **Metadata
@@ -95,6 +95,7 @@ as **Back up to Lattice Cloud**. You need an open workspace to **back up**.
 1. Click **Sign in to Lattice Cloud**, then **Restore encrypted backup**.
 2. Pick a cloud workspace, a backup, and a destination folder.
 3. Click **Restore backup**. Lattice opens that folder as the workspace.
+   If the browser shows **Opening Lattice…**, click **Open Lattice**.
 
 You do not need to create a Personal workspace first.
 

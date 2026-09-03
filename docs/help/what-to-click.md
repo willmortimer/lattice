@@ -32,18 +32,15 @@ open **Inspect** on that item or **Show agent** for help with the workspace.
   do not need to create Personal first. See [Open a workspace](first-workspace.md).
 - **Restore with a workspace open** — **Settings → Cloud account → Encrypted
   workspace backup**, or Inspect for the open workspace.
-- **Shared editing** — **Plain file** / **Collaborative** on pages and canvases
-  with a resource ID (see [Collaborative pages and boards](collaboration.md)).
+- **Shared page editing** — **Plain file** / **Collaborative** on pages with a
+  resource ID (see [Collaborative pages](collaboration.md)).
 - **Screenshot to inbox** — **⌘⇧2** (Screen Clip), then open **Capture Inbox** in Files.
+- **Connect Cursor or Claude** — **Settings → Plugins** (copy MCP config or save an Agent Plugin).
 - **Open a PDF or image from Finder** — right-click → **Open With → Lattice**.
   Lattice is a viewer for those files, not the default app. Markdown stays the
   editor.
 - **Add a folder from Finder** — select the folder, then **Services → Add folder
   to Lattice**, or use the in-app existing-folder dialog. Opening a stray file
   does not wrap its parent folder as a workspace.
-- **Import a folder into this workspace** — with a workspace already open, use
-  **Import folder…** in the Files tree (plus menu or a folder context menu).
-  That copies the folder in; it does not create a new workspace. Files that
-  already exist with different content are left as-is.
 - **Preview Markdown in Finder** — select the file and press **Space** for
   rendered Markdown, not the source.

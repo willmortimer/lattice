@@ -4,9 +4,13 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use lattice_daemon::{
-    default_socket_path, mcp, mcp_client_config, serve_with_shutdown_and_controllers, AgentController,
-    AgentProviderMode, DaemonConfig, DaemonPreferences, SemanticController, SemanticProviderMode,
-    VoiceController, VoiceProviderMode, DEFAULT_API_PORT,
+    default_socket_path, mcp, mcp_client_config, serve_with_shutdown_and_controllers,
+    AgentController, AgentProviderMode, DaemonConfig, DaemonPreferences, SemanticController,
+    SemanticProviderMode, VoiceController, VoiceProviderMode, DEFAULT_API_PORT,
+};
+use lattice_mcp_catalog::agent_plugin::{
+    cloud_agent_plugin, local_agent_plugin, loopback_mcp_url, write_agent_plugins,
+    AgentPluginOptions, DEFAULT_CLOUD_MCP_ORIGIN,
 };
 use lattice_runtime::LatticeRuntime;
 use serde_json;
@@ -57,6 +61,26 @@ enum McpClientKind {
     ClaudeDesktop,
 }
 
+#[derive(Debug, Clone, Copy, Default, ValueEnum)]
+enum AgentPluginTarget {
+    #[value(name = "local")]
+    Local,
+    #[value(name = "cloud")]
+    Cloud,
+    #[default]
+    #[value(name = "both")]
+    Both,
+}
+
+impl std::fmt::Display for AgentPluginTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.to_possible_value()
+            .expect("no skipped clap values")
+            .get_name()
+            .fmt(f)
+    }
+}
+
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Serve MCP tools over stdio (search/read/related/build_context).
@@ -66,7 +90,7 @@ enum Commands {
         auth_token: Option<String>,
 
         /// Print a client-ready `mcpServers` JSON block and exit (no stdio server).
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["print_loopback_url", "print_agent_plugin", "install_cursor"])]
         print_client_config: bool,
 
         /// MCP client target (`cursor` or `claude-desktop`). Required with
@@ -74,6 +98,31 @@ enum Commands {
         #[arg(long, requires = "print_client_config")]
         #[arg(required_if_eq("print_client_config", "true"))]
         client: Option<McpClientKind>,
+
+        /// Print the loopback Streamable HTTP MCP URL (`http://127.0.0.1:<port>/mcp`) and exit.
+        #[arg(long, conflicts_with_all = ["print_client_config", "print_agent_plugin", "install_cursor"])]
+        print_loopback_url: bool,
+
+        /// Write Agent Plugins 1.0 directories (`plugin.json` + `mcp.json`) and exit.
+        #[arg(long, conflicts_with_all = ["print_client_config", "print_loopback_url", "install_cursor"])]
+        print_agent_plugin: bool,
+
+        /// Directory that will contain `lattice.mcp/` and/or `lattice.mcp.cloud/`.
+        #[arg(long, requires = "print_agent_plugin")]
+        #[arg(required_if_eq("print_agent_plugin", "true"))]
+        plugin_out: Option<PathBuf>,
+
+        /// Which Agent Plugin packages to write (`local`, `cloud`, or `both`).
+        #[arg(long, requires = "print_agent_plugin", value_enum, default_value_t = AgentPluginTarget::Both)]
+        plugin_target: AgentPluginTarget,
+
+        /// Merge Lattice stdio MCP into Cursor `.cursor/mcp.json` and exit.
+        #[arg(long, conflicts_with_all = ["print_client_config", "print_loopback_url", "print_agent_plugin"])]
+        install_cursor: bool,
+
+        /// Destination Cursor MCP config (default: `./.cursor/mcp.json`).
+        #[arg(long, requires = "install_cursor")]
+        cursor_config: Option<PathBuf>,
     },
 }
 
@@ -92,16 +141,90 @@ async fn main() -> Result<()> {
         auth_token,
         print_client_config,
         client,
+        print_loopback_url,
+        print_agent_plugin,
+        plugin_out,
+        plugin_target,
+        install_cursor,
+        cursor_config,
     }) = cli.command
     {
+        if print_loopback_url {
+            let port = if cli.api_port == 0 {
+                DEFAULT_API_PORT
+            } else {
+                cli.api_port
+            };
+            println!("{}", loopback_mcp_url(port));
+            return Ok(());
+        }
+
+        if print_agent_plugin {
+            let out = plugin_out.expect("clap requires --plugin-out with --print-agent-plugin");
+            let exe = std::env::current_exe().context("resolve current executable path")?;
+            let command_path = exe.to_string_lossy().into_owned();
+            let port = if cli.api_port == 0 {
+                DEFAULT_API_PORT
+            } else {
+                cli.api_port
+            };
+            let opts = AgentPluginOptions {
+                latticed_command: command_path,
+                loopback_url: loopback_mcp_url(port),
+                cloud_origin: std::env::var("LATTICE_CLOUD_URL")
+                    .ok()
+                    .map(|value| value.trim().trim_end_matches('/').to_string())
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| DEFAULT_CLOUD_MCP_ORIGIN.to_string()),
+            };
+            let packages = match plugin_target {
+                AgentPluginTarget::Local => vec![local_agent_plugin(&opts)],
+                AgentPluginTarget::Cloud => vec![cloud_agent_plugin(&opts)],
+                AgentPluginTarget::Both => {
+                    vec![local_agent_plugin(&opts), cloud_agent_plugin(&opts)]
+                }
+            };
+            let written =
+                write_agent_plugins(&out, &packages).context("write Agent Plugin directories")?;
+            for path in written {
+                println!("{}", path.display());
+            }
+            return Ok(());
+        }
+
+        if install_cursor {
+            let dest = cursor_config.unwrap_or_else(|| PathBuf::from(".cursor/mcp.json"));
+            let exe = std::env::current_exe().context("resolve current executable path")?;
+            let command_path = exe.to_string_lossy().into_owned();
+            let env_token = std::env::var("LATTICE_AUTH_TOKEN")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
+            let workspace_root = std::env::var("LATTICE_WORKSPACE_ROOT")
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
+            let written = mcp_client_config::install_cursor_mcp_config(
+                &dest,
+                &command_path,
+                env_token.as_deref(),
+                workspace_root.as_deref(),
+            )
+            .context("write Cursor mcp.json")?;
+            println!("{}", written.display());
+            return Ok(());
+        }
+
         if print_client_config {
             let _client = client.expect("clap requires --client with --print-client-config");
             let exe = std::env::current_exe().context("resolve current executable path")?;
             let command_path = exe.to_string_lossy();
             let env_token = std::env::var("LATTICE_AUTH_TOKEN").ok();
+            let workspace_root = std::env::var("LATTICE_WORKSPACE_ROOT").ok();
             let config = mcp_client_config::build_mcp_client_config(
                 &command_path,
                 env_token.as_deref(),
+                workspace_root.as_deref(),
             );
             println!("{}", serde_json::to_string_pretty(&config)?);
             return Ok(());
@@ -136,10 +259,7 @@ async fn main() -> Result<()> {
     // Never log token values.
     std::env::set_var("LATTICE_AUTH_TOKEN", &config.auth_token);
     if let Some(port) = config.api_port {
-        std::env::set_var(
-            "LATTICE_API_BASE_URL",
-            format!("http://127.0.0.1:{port}"),
-        );
+        std::env::set_var("LATTICE_API_BASE_URL", format!("http://127.0.0.1:{port}"));
     } else {
         std::env::remove_var("LATTICE_API_BASE_URL");
     }
@@ -218,8 +338,7 @@ async fn wait_for_shutdown_signal() -> std::io::Result<()> {
     {
         let mut sigterm =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-        let mut sigint =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+        let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
         tokio::select! {
             _ = sigterm.recv() => {}
             _ = sigint.recv() => {}

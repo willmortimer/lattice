@@ -26,7 +26,14 @@ Legend: **[x] Shipped** · **[ ] Near**
 | MCP (local daemon) | Inspect + propose tools | [x] Shipped |
 | Localhost HTTP API | Same executor family as MCP | [x] Shipped |
 | Embedded desktop agent | Proposal workflow in-app | [x] Shipped |
-| Hosted cloud MCP gateway | Optional remote agent entry | [ ] Near |
+| Hosted cloud MCP JSON-RPC + OAuth AS | DCR, PKCE, browser consent on Lattice Cloud | [x] Shipped (server) |
+| Copy MCP stdio / loopback URL / cloud connector | Settings → Plugins and `latticed mcp --print-*` | [x] Shipped |
+| Cursor project MCP (`latticed mcp --install-cursor`) | Writes `.cursor/mcp.json` | [x] Shipped |
+| Agent Plugins 1.0 package | Export `plugin.json` + `mcp.json` for *hosts* to install Lattice | [x] Shipped |
+| MCP Apps (proposal UI resource) | Local + cloud `apps/list` + `text/html;profile=mcp-app` | [x] Shipped |
+| ChatGPT / Codex custom connector | Cloud MCP URL + OAuth DCR/PKCE/`iss` | [x] Shipped (server) |
+| Claude Desktop remote connector packaged | End-user connector setup in Claude store / DXT | [ ] Near |
+| Lattice as Agent Plugin *host* (load other plugins) | Out of scope | [ ] Not planned |
 
 ## Data and notebooks
 

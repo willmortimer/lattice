@@ -8,11 +8,15 @@ use std::io::{self, BufRead, Write};
 
 use axum::http::{HeaderMap, StatusCode};
 use lattice_mcp_catalog::local_tools;
+use lattice_mcp_catalog::mcp_apps::{
+    apps_list_result, attach_proposal_app_ui, resources_list_result, resources_read_result,
+};
 use lattice_runtime::LatticeRuntime;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::tool_executor::{execute, ToolCall, ToolError};
+use crate::api::ExportAudience;
+use crate::tool_executor::{execute_for, ToolCall, ToolError};
 
 pub const PROTOCOL_VERSION_LEGACY: &str = "2024-11-05";
 pub const PROTOCOL_VERSION_MODERN: &str = "2026-07-28";
@@ -170,11 +174,7 @@ fn validate_modern_headers(headers: &HeaderMap, request: &JsonRpcRequest) -> Opt
 }
 
 fn header_mismatch_error(id: Option<Value>, message: String) -> Value {
-    error(
-        id.unwrap_or(Value::Null),
-        ERR_HEADER_MISMATCH,
-        message,
-    )
+    error(id.unwrap_or(Value::Null), ERR_HEADER_MISMATCH, message)
 }
 
 fn write_message(out: &mut impl Write, value: &Value) -> io::Result<()> {
@@ -190,8 +190,8 @@ pub fn dispatch(runtime: &LatticeRuntime, request: &JsonRpcRequest) -> Option<Va
         "initialize" => Some(ok(
             id,
             json!({
-                "protocolVersion": PROTOCOL_VERSION_LEGACY,
-                "capabilities": { "tools": {} },
+                "protocolVersion": negotiate_protocol_version(&request.params),
+                "capabilities": local_server_capabilities(),
                 "serverInfo": {
                     "name": SERVER_NAME,
                     "version": SERVER_VERSION,
@@ -203,7 +203,17 @@ pub fn dispatch(runtime: &LatticeRuntime, request: &JsonRpcRequest) -> Option<Va
         "ping" => Some(ok(id, json!({}))),
         "tools/list" => Some(ok(id, local_tools())),
         "tools/call" => Some(handle_tools_call(runtime, id, &request.params)),
+        "apps/list" => Some(ok(id, apps_list_result())),
+        "resources/list" => Some(ok(id, resources_list_result())),
+        "resources/read" => Some(handle_resources_read(id, &request.params)),
         other => Some(error(id, -32601, format!("method not found: {other}"))),
+    }
+}
+
+fn negotiate_protocol_version(params: &Value) -> &'static str {
+    match params.get("protocolVersion").and_then(Value::as_str) {
+        Some(PROTOCOL_VERSION_MODERN) => PROTOCOL_VERSION_MODERN,
+        _ => PROTOCOL_VERSION_LEGACY,
     }
 }
 
@@ -211,7 +221,7 @@ fn discover_result() -> Value {
     json!({
         "resultType": "complete",
         "supportedVersions": [PROTOCOL_VERSION_MODERN, PROTOCOL_VERSION_LEGACY],
-        "capabilities": { "tools": {} },
+        "capabilities": local_server_capabilities(),
         "_meta": {
             "io.modelcontextprotocol/serverInfo": {
                 "name": SERVER_NAME,
@@ -219,6 +229,22 @@ fn discover_result() -> Value {
             }
         },
     })
+}
+
+fn local_server_capabilities() -> Value {
+    json!({
+        "tools": {},
+        "resources": {},
+        "apps": { "list": {} }
+    })
+}
+
+fn handle_resources_read(id: Value, params: &Value) -> Value {
+    let uri = params.get("uri").and_then(Value::as_str).unwrap_or("");
+    match resources_read_result(uri) {
+        Some(result) => ok(id, result),
+        None => error(id, -32002, format!("resource not found: {uri}")),
+    }
 }
 
 fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Value {
@@ -233,15 +259,18 @@ fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Val
         arguments,
     };
 
-    match execute(runtime, call) {
-        Ok(value) => ok(
-            id,
-            json!({
-                "content": [{ "type": "text", "text": value.to_string() }],
-                "structuredContent": value,
-                "isError": false
-            }),
-        ),
+    match execute_for(runtime, call, ExportAudience::OwnerAgent) {
+        Ok(value) => {
+            let result = attach_proposal_app_ui(
+                name,
+                json!({
+                    "content": [{ "type": "text", "text": value.to_string() }],
+                    "structuredContent": value,
+                    "isError": false
+                }),
+            );
+            ok(id, result)
+        }
         Err(ToolError::UnknownTool { name }) => error(id, -32602, format!("unknown tool: {name}")),
         Err(err) => ok(
             id,
@@ -280,8 +309,10 @@ mod tests {
     #[test]
     fn tools_list_uses_catalog_workspace_names() {
         let names = tool_names();
-        assert_eq!(names.len(), 14);
+        assert_eq!(names.len(), 16);
         assert_eq!(names[0], TOOL_WORKSPACE_SEARCH);
+        assert!(names.iter().any(|n| n == "workspace.list"));
+        assert!(names.iter().any(|n| n == "workspace.get_lattice_docs"));
         assert!(names.iter().all(|n| n.starts_with("workspace.")));
     }
 
@@ -301,11 +332,102 @@ mod tests {
             .iter()
             .filter_map(|v| v.as_str())
             .collect::<Vec<_>>();
-        assert_eq!(versions, vec![PROTOCOL_VERSION_MODERN, PROTOCOL_VERSION_LEGACY]);
+        assert_eq!(
+            versions,
+            vec![PROTOCOL_VERSION_MODERN, PROTOCOL_VERSION_LEGACY]
+        );
         assert_eq!(
             resp["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
             SERVER_NAME
         );
+        assert!(resp["result"]["capabilities"]["apps"]["list"].is_object());
+        assert!(resp["result"]["capabilities"]["resources"].is_object());
+    }
+
+    #[test]
+    fn apps_list_and_resources_read_proposal_app() {
+        let runtime = LatticeRuntime::new();
+        let list = dispatch(
+            &runtime,
+            &JsonRpcRequest {
+                jsonrpc: "2.0".into(),
+                id: Some(json!("apps-1")),
+                method: "apps/list".into(),
+                params: json!({}),
+            },
+        )
+        .unwrap();
+        assert_eq!(list["result"]["_meta"]["io.lattice/apps"]["enabled"], true);
+        assert_eq!(
+            list["result"]["apps"][0]["resourceUri"],
+            lattice_mcp_catalog::mcp_apps::APP_PROPOSAL_RESOURCE_URI
+        );
+
+        let read = dispatch(
+            &runtime,
+            &JsonRpcRequest {
+                jsonrpc: "2.0".into(),
+                id: Some(json!("res-1")),
+                method: "resources/read".into(),
+                params: json!({
+                    "uri": lattice_mcp_catalog::mcp_apps::APP_PROPOSAL_RESOURCE_URI
+                }),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            read["result"]["contents"][0]["mimeType"],
+            lattice_mcp_catalog::mcp_apps::APP_PROPOSAL_MIME
+        );
+
+        let docs = dispatch(
+            &runtime,
+            &JsonRpcRequest {
+                jsonrpc: "2.0".into(),
+                id: Some(json!("docs-1")),
+                method: "resources/read".into(),
+                params: json!({ "uri": "lattice://docs/mcp" }),
+            },
+        )
+        .unwrap();
+        assert_eq!(docs["result"]["contents"][0]["mimeType"], "text/markdown");
+    }
+
+    #[test]
+    fn initialize_negotiates_modern_protocol() {
+        let runtime = LatticeRuntime::new();
+        let resp = dispatch(
+            &runtime,
+            &JsonRpcRequest {
+                jsonrpc: "2.0".into(),
+                id: Some(json!("init-1")),
+                method: "initialize".into(),
+                params: json!({ "protocolVersion": PROTOCOL_VERSION_MODERN }),
+            },
+        )
+        .unwrap();
+        assert_eq!(resp["result"]["protocolVersion"], PROTOCOL_VERSION_MODERN);
+    }
+
+    #[test]
+    fn tools_call_get_docs() {
+        let runtime = LatticeRuntime::new();
+        let resp = dispatch(
+            &runtime,
+            &JsonRpcRequest {
+                jsonrpc: "2.0".into(),
+                id: Some(json!("docs-tool")),
+                method: "tools/call".into(),
+                params: json!({
+                    "name": "workspace.get_lattice_docs",
+                    "arguments": { "topic": "list" }
+                }),
+            },
+        )
+        .unwrap();
+        assert_eq!(resp["result"]["isError"], false);
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("workspace.get_lattice_docs") || text.contains("`mcp`"));
     }
 
     #[test]
@@ -398,6 +520,14 @@ mod tests {
                 .unwrap(),
             "mcp"
         );
+        assert_eq!(
+            resp["result"]["_meta"]["ui"]["resourceUri"],
+            lattice_mcp_catalog::mcp_apps::APP_PROPOSAL_RESOURCE_URI
+        );
+        assert_eq!(
+            list_resp["result"]["_meta"]["ui"]["resourceUri"],
+            lattice_mcp_catalog::mcp_apps::APP_PROPOSAL_RESOURCE_URI
+        );
     }
 
     #[test]
@@ -473,12 +603,10 @@ steps:
         };
         let resp = dispatch(&runtime, &req).unwrap();
         assert_eq!(resp["error"]["code"], -32602);
-        assert!(
-            resp["error"]["message"]
-                .as_str()
-                .unwrap()
-                .contains("unknown tool")
-        );
+        assert!(resp["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("unknown tool"));
     }
 
     #[test]

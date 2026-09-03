@@ -210,8 +210,9 @@ stdout and does **not** start the stdio MCP server.
 If `LATTICE_AUTH_TOKEN` is already set in the process environment, the JSON
 includes an `env` block; otherwise `env` is omitted (no invented tokens).
 
-**Cursor:** merge the output into project `.cursor/mcp.json` or Cursor user MCP
-settings (stdio server entry).
+**Cursor:** `latticed mcp --install-cursor` writes project `.cursor/mcp.json`,
+or merge `--print-client-config` into that file or Cursor user MCP settings
+(stdio server entry).
 
 **Claude Desktop:** merge into `claude_desktop_config.json` (macOS:
 `~/Library/Application Support/Claude/claude_desktop_config.json`; Windows:
@@ -230,6 +231,43 @@ Example output (token present in environment):
   }
 }
 ```
+
+### Loopback URL (`--print-loopback-url`)
+
+Prints `http://127.0.0.1:<api-port>/mcp` (default `18787`) and exits. The HTTP
+API binds **`127.0.0.1` only**. Loopback MCP requires the daemon Bearer token.
+
+```sh
+latticed mcp --print-loopback-url
+latticed --api-port 19000 mcp --print-loopback-url
+```
+
+### Agent Plugin 1.0 (`--print-agent-plugin`)
+
+Writes [Agent Plugins 1.0](https://agent-plugins.org/) directories under
+`--plugin-out` (`lattice.mcp` and/or `lattice.mcp.cloud`). Does not start MCP
+and does not write tokens.
+
+```sh
+latticed mcp --print-agent-plugin --plugin-out ./plugins
+latticed mcp --print-agent-plugin --plugin-target local --plugin-out ./plugins
+```
+
+### Cursor install (`--install-cursor`)
+
+Merges a `"lattice"` stdio server into `./.cursor/mcp.json` (or
+`--cursor-config PATH`) and exits. Preserves other servers. Copies
+`LATTICE_AUTH_TOKEN` / `LATTICE_WORKSPACE_ROOT` into `env` only when those
+variables are already set.
+
+```sh
+latticed mcp --install-cursor
+latticed mcp --install-cursor --cursor-config /path/to/mcp.json
+```
+
+Desktop Settings → Plugins can copy the same stdio JSON, loopback URL, and
+cloud connector, and save the plugin folders in one click. Lattice exports
+Agent Plugins; it does not host third-party plugins.
 
 ## Tests
 

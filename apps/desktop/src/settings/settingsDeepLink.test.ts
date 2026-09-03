@@ -31,6 +31,10 @@ describe("resolveSettingsDeepLink", () => {
       section: "remote",
       settingId: "remote.access",
     });
+    expect(resolveSettingsDeepLink("plugins/mcp")).toEqual({
+      section: "plugins",
+      settingId: "plugins.mcp-stdio",
+    });
   });
 
   it("resolves section-only paths", () => {
