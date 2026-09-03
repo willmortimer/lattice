@@ -49,7 +49,7 @@ describe("semanticStatusLabel", () => {
   it("confirm copy mentions size and license", () => {
     expect(SEMANTIC_MODEL_CONFIRM).toContain("~640 MB");
     expect(SEMANTIC_MODEL_CONFIRM).toContain("Apache-2.0");
-    expect(SEMANTIC_MODEL_CONFIRM).toContain("never uploaded");
+    expect(SEMANTIC_MODEL_CONFIRM).toContain("this device");
   });
 });
 

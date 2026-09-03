@@ -36,6 +36,14 @@ pub fn format_windows_pipe_endpoint(username: &str) -> PathBuf {
     PathBuf::from(format!(r"\\.\pipe\lattice-latticed-{username}"))
 }
 
+/// Format the Windows named-pipe endpoint for `lattice-embed-host`.
+///
+/// Result: `\\.\pipe\lattice-embed-host-<username>`. Distinct from
+/// [`format_windows_pipe_endpoint`] so latticed and embed-host never share a pipe.
+pub fn format_windows_embed_host_pipe_endpoint(username: &str) -> PathBuf {
+    PathBuf::from(format!(r"\\.\pipe\lattice-embed-host-{username}"))
+}
+
 /// Default daemon IPC endpoint for this platform.
 pub fn default_endpoint() -> PathBuf {
     #[cfg(unix)]
@@ -101,19 +109,13 @@ mod tests {
     #[test]
     fn unix_socket_path_uses_lattice_run_latticed_sock() {
         let path = format_unix_socket_endpoint("/var/data");
-        assert_eq!(
-            path,
-            PathBuf::from("/var/data/Lattice/run/latticed.sock")
-        );
+        assert_eq!(path, PathBuf::from("/var/data/Lattice/run/latticed.sock"));
     }
 
     #[test]
     fn windows_pipe_name_includes_username() {
         let path = format_windows_pipe_endpoint("alice");
-        assert_eq!(
-            path,
-            PathBuf::from(r"\\.\pipe\lattice-latticed-alice")
-        );
+        assert_eq!(path, PathBuf::from(r"\\.\pipe\lattice-latticed-alice"));
     }
 
     #[test]
@@ -123,6 +125,16 @@ mod tests {
             path,
             PathBuf::from(r"\\.\pipe\lattice-latticed-Will Mortimer")
         );
+    }
+
+    #[test]
+    fn windows_embed_host_pipe_is_distinct_from_latticed() {
+        let path = format_windows_embed_host_pipe_endpoint("Will Mortimer");
+        assert_eq!(
+            path,
+            PathBuf::from(r"\\.\pipe\lattice-embed-host-Will Mortimer")
+        );
+        assert_ne!(path, format_windows_pipe_endpoint("Will Mortimer"));
     }
 
     #[cfg(unix)]

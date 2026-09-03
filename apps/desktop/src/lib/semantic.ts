@@ -34,7 +34,7 @@ export type SemanticUiEvent = {
 
 /** Confirm-dialog copy for first-time model download (~640 MB Apache-2.0 GGUF). */
 export const SEMANTIC_MODEL_CONFIRM =
-  "Semantic search downloads Qwen3-Embedding-0.6B (Q8, ~640 MB, Apache-2.0). The model stays on this Mac and is never uploaded. Continue?";
+  "Semantic search downloads Qwen3-Embedding-0.6B (Q8, ~640 MB, Apache-2.0). The model stays on this device and is never uploaded. Continue?";
 
 /** Runtime message when Lance vectors lag the workspace snapshot (maps to indexing). */
 export const VECTORS_BEHIND_MESSAGE = "vectors behind workspace";

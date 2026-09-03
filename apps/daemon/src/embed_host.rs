@@ -1,7 +1,7 @@
 //! Optional `lattice-embed-host` supervision for semantic indexing.
 //!
 //! Host modes (`ExternalSocket` / `SpawnHost`) use [`ReconnectableEmbedHostProvider`]
-//! so embedding jobs call the host over UDS. When the host dies, sessions are
+//! so embedding jobs call the host over UDS (Unix) or a named pipe (Windows). When the host dies, sessions are
 //! marked semantically degraded so hybrid search falls back to FTS. Restarts use
 //! bounded exponential backoff and reconnect the provider.
 //!
@@ -34,7 +34,7 @@ use lattice_runtime::{
 };
 use tracing::{info, warn};
 
-use crate::config::default_run_dir;
+use crate::config::{default_embed_host_endpoint, default_run_dir, is_named_pipe_endpoint};
 use crate::error::{Error, Result};
 
 /// Environment variable naming an existing embed-host UDS path.
@@ -96,14 +96,10 @@ impl SemanticProviderMode {
         if let Ok(socket) = std::env::var(ENV_EMBED_HOST_SOCKET) {
             let socket = PathBuf::from(socket);
             if let Ok(bin) = std::env::var(ENV_EMBED_HOST_BIN) {
-                let models_dir = socket
-                    .parent()
-                    .unwrap_or_else(|| Path::new("."))
-                    .join("embed-models");
                 return Some(Self::SpawnHost {
                     binary: PathBuf::from(bin),
+                    models_dir: models_dir_for_endpoint(&socket),
                     socket,
-                    models_dir,
                 });
             }
             return Some(Self::ExternalSocket { socket });
@@ -139,12 +135,24 @@ impl SemanticProviderMode {
     }
 
     fn spawn_host_default(binary: PathBuf) -> Self {
-        let run_dir = default_run_dir();
+        let socket = default_embed_host_endpoint();
         Self::SpawnHost {
             binary,
-            socket: run_dir.join("embed-host.sock"),
-            models_dir: run_dir.join("embed-models"),
+            models_dir: models_dir_for_endpoint(&socket),
+            socket,
         }
+    }
+}
+
+fn models_dir_for_endpoint(socket: &Path) -> PathBuf {
+    // Named pipes have no filesystem parent; keep models under the run dir.
+    if is_named_pipe_endpoint(socket) {
+        default_run_dir().join("embed-models")
+    } else {
+        socket
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("embed-models")
     }
 }
 
@@ -223,9 +231,8 @@ impl SemanticController {
                 }))
             }
             SemanticProviderMode::PioneerInProcess => {
-                let provider = PioneerEmbeddingProvider::from_env().map_err(|err| {
-                    Error::Spawn(format!("pioneer embedding provider: {err}"))
-                })?;
+                let provider = PioneerEmbeddingProvider::from_env()
+                    .map_err(|err| Error::Spawn(format!("pioneer embedding provider: {err}")))?;
                 let provider: Arc<dyn EmbeddingProvider> = Arc::new(provider);
                 info!(
                     provider = provider.specification().provider_id.as_str(),
@@ -248,10 +255,7 @@ impl SemanticController {
             SemanticProviderMode::ExternalSocket { socket } => {
                 let (handle, owned) = take_embed_runtime()?;
                 wait_for_socket(&socket, Duration::from_secs(5))?;
-                let models_dir = socket
-                    .parent()
-                    .unwrap_or_else(|| Path::new("."))
-                    .join("embed-models");
+                let models_dir = models_dir_for_endpoint(&socket);
                 let (model_dir, dimensions) = ensure_host_model_dir(&models_dir)?;
                 let host_provider =
                     connect_host_provider(&handle, &socket, &model_dir, dimensions)?;
@@ -599,7 +603,7 @@ impl SemanticController {
             .spawn(move || {
                 let mut degraded = false;
                 while !stop.load(Ordering::SeqCst) {
-                    let alive = socket.exists();
+                    let alive = endpoint_is_ready(&socket);
                     if !alive && !degraded {
                         degraded = true;
                         controller.mark_all_degraded(true);
@@ -838,13 +842,15 @@ fn spawn_embed_host(
     models_dir: &Path,
     backend: &str,
 ) -> Result<Child> {
-    if let Some(parent) = socket.parent() {
-        std::fs::create_dir_all(parent)?;
+    if !is_named_pipe_endpoint(socket) {
+        if let Some(parent) = socket.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        if socket.exists() {
+            let _ = std::fs::remove_file(socket);
+        }
     }
     std::fs::create_dir_all(models_dir)?;
-    if socket.exists() {
-        let _ = std::fs::remove_file(socket);
-    }
     Command::new(binary)
         .arg("serve")
         .arg("--socket")
@@ -868,7 +874,7 @@ fn spawn_embed_host(
 fn wait_for_socket(socket: &Path, timeout: Duration) -> Result<()> {
     let deadline = std::time::Instant::now() + timeout;
     while std::time::Instant::now() < deadline {
-        if socket.exists() {
+        if endpoint_is_ready(socket) {
             return Ok(());
         }
         thread::sleep(Duration::from_millis(25));
@@ -876,6 +882,32 @@ fn wait_for_socket(socket: &Path, timeout: Duration) -> Result<()> {
     Err(Error::ReadyTimeout {
         path: socket.display().to_string(),
     })
+}
+
+/// Unix: UDS file appears. Windows: named pipes are not files; probe connect.
+fn endpoint_is_ready(endpoint: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        endpoint.exists()
+    }
+    #[cfg(windows)]
+    {
+        windows_pipe_accepts_connections(endpoint)
+    }
+}
+
+#[cfg(windows)]
+fn windows_pipe_accepts_connections(endpoint: &Path) -> bool {
+    use tokio::net::windows::named_pipe::ClientOptions;
+
+    // ERROR_PIPE_BUSY — server exists but has no free instance yet.
+    const ERROR_PIPE_BUSY: i32 = 231;
+
+    match ClientOptions::new().open(endpoint) {
+        Ok(_client) => true,
+        Err(err) if err.raw_os_error() == Some(ERROR_PIPE_BUSY) => true,
+        Err(_) => false,
+    }
 }
 
 fn unavailable_status() -> SemanticStatus {
@@ -930,11 +962,31 @@ fn assert_production_llama_provider(
     Ok(())
 }
 
+fn binary_name_candidates(name: &str) -> Vec<String> {
+    #[cfg(windows)]
+    {
+        if name
+            .rsplit_once('.')
+            .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("exe"))
+        {
+            vec![name.to_string()]
+        } else {
+            vec![format!("{name}.exe"), name.to_string()]
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        vec![name.to_string()]
+    }
+}
+
 fn current_exe_sibling(name: &str) -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?;
-    let candidate = dir.join(name);
-    candidate.is_file().then_some(candidate)
+    binary_name_candidates(name)
+        .into_iter()
+        .map(|candidate| dir.join(candidate))
+        .find(|path| path.is_file())
 }
 
 /// Locate `lattice-embed-host` for production discovery / tests / local launches.
@@ -974,10 +1026,13 @@ pub fn resolve_embed_host_bin() -> Option<PathBuf> {
 fn which_bin(name: &str) -> std::io::Result<PathBuf> {
     let path = std::env::var_os("PATH")
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "PATH not set"))?;
+    let candidates = binary_name_candidates(name);
     for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(name);
-        if candidate.is_file() {
-            return Ok(candidate);
+        for candidate_name in &candidates {
+            let candidate = dir.join(candidate_name);
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
         }
     }
     Err(std::io::Error::new(
@@ -1058,11 +1113,32 @@ mod tests {
                 models_dir,
             } => {
                 assert_eq!(binary, PathBuf::from("/tmp/lattice-embed-host"));
-                assert!(socket.ends_with("embed-host.sock"));
+                #[cfg(unix)]
+                {
+                    assert!(socket.ends_with("embed-host.sock"));
+                }
+                #[cfg(windows)]
+                {
+                    let s = socket.to_string_lossy();
+                    assert!(s.starts_with(r"\\.\pipe\lattice-embed-host-"));
+                }
                 assert!(models_dir.ends_with("embed-models"));
             }
             other => panic!("expected SpawnHost, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn models_dir_for_named_pipe_stays_under_run_dir() {
+        let socket = PathBuf::from(r"\\.\pipe\lattice-embed-host-alice");
+        let dir = models_dir_for_endpoint(&socket);
+        assert!(dir.ends_with("embed-models"));
+        assert!(
+            dir.to_string_lossy().contains("Lattice"),
+            "expected Lattice run dir, got {}",
+            dir.display()
+        );
+        assert!(!dir.to_string_lossy().contains(r"\\.\pipe"));
     }
 
     #[test]

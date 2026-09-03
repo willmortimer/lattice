@@ -89,6 +89,29 @@ pub fn default_socket_path() -> PathBuf {
     lattice_client::default_endpoint()
 }
 
+/// Default embed-host IPC endpoint for this platform.
+///
+/// Unix: `{data}/Lattice/run/embed-host.sock`.
+/// Windows: `\\.\pipe\lattice-embed-host-<user>` (named pipes are not filesystem paths).
+pub fn default_embed_host_endpoint() -> PathBuf {
+    #[cfg(windows)]
+    {
+        let username = std::env::var("USERNAME")
+            .or_else(|_| std::env::var("USER"))
+            .unwrap_or_else(|_| "unknown".into());
+        lattice_client::format_windows_embed_host_pipe_endpoint(&username)
+    }
+    #[cfg(not(windows))]
+    {
+        default_run_dir().join("embed-host.sock")
+    }
+}
+
+/// True when `path` is a Windows named-pipe name (`\\.\pipe\…`).
+pub fn is_named_pipe_endpoint(path: &std::path::Path) -> bool {
+    path.to_string_lossy().starts_with(r"\\.\pipe\")
+}
+
 pub(crate) fn unix_now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -116,6 +139,27 @@ mod tests {
         let path = default_socket_path();
         let s = path.to_string_lossy();
         assert!(s.starts_with(r"\\.\pipe\lattice-latticed-"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn default_embed_host_endpoint_is_named_pipe() {
+        let path = default_embed_host_endpoint();
+        let s = path.to_string_lossy();
+        assert!(s.starts_with(r"\\.\pipe\lattice-embed-host-"));
+        assert!(is_named_pipe_endpoint(&path));
+        assert_ne!(path, default_socket_path());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn default_embed_host_endpoint_is_uds() {
+        let path = default_embed_host_endpoint();
+        assert_eq!(
+            path.file_name().and_then(|n| n.to_str()),
+            Some("embed-host.sock")
+        );
+        assert!(!is_named_pipe_endpoint(&path));
     }
 
     #[test]

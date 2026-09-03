@@ -1,0 +1,9 @@
+target
+result
+.direnv
+node_modules
+research
+apps/desktop/dist
+.git/modules
+winbuild-probe.log
+winbuild-nsis.jsonl

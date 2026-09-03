@@ -22,7 +22,7 @@ pub use handshake::{
 };
 pub use transport::{
     connect as connect_daemon_transport, default_endpoint, format_unix_socket_endpoint,
-    format_windows_pipe_endpoint, DaemonStream,
+    format_windows_embed_host_pipe_endpoint, format_windows_pipe_endpoint, DaemonStream,
 };
 
 // Re-export protocol types callers need for request construction.

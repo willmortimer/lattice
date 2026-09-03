@@ -27,11 +27,11 @@ pub mod mcp;
 pub mod mcp_client_config;
 mod preferences;
 mod resource_api;
-mod tool_executor;
 mod schedule;
 mod scheduler_api;
 mod server;
 mod spawn;
+mod tool_executor;
 #[cfg(target_os = "macos")]
 mod voice_host;
 #[cfg(not(target_os = "macos"))]
@@ -66,22 +66,21 @@ pub use agent_threads_api::{
     PatchThreadParams, PatchThreadResponse, ThreadDto, WorkspaceScopeParams,
 };
 pub use api::{
-    api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,
-    api_profile_dataset, api_propose_artifact, api_propose_interface, api_propose_page,
-    api_propose_resource, api_propose_workflow, api_read, api_related, api_search, ApiError,
-    api_cloud_blob_open, api_resource_stat, ResourcePathParams, WorkspaceRefParams,
-    BuildContextParams, BuildContextResponse, CancelJobParams, CreateProposalParams,
-    DatasetInspectParams, GetJobParams, GetProposalParams, JobResponse, ListJobsParams,
-    ListJobsResponse, ListProposalsParams, ListProposalsResponse, ProposalResponse,
-    ProposePageParams, ProposeResourceParams, ProposeYamlParams, ReadParams, ReadResponse,
-    RelatedParams, RelatedResponse, SearchParams, SearchResponse, MAX_CONTEXT_BYTES, MAX_HIT_LIMIT,
-    MAX_READ_BYTES,
-};
-pub use config::{
-    default_run_dir, default_socket_path, DaemonConfig, DEFAULT_API_PORT,
-    DEFAULT_IDLE_SHUTDOWN_TIMEOUT,
+    api_cloud_blob_open, api_get_proposal, api_list_active_jobs, api_list_proposals,
+    api_list_recent_jobs, api_profile_dataset, api_propose_artifact, api_propose_interface,
+    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related,
+    api_resource_stat, api_search, ApiError, BuildContextParams, BuildContextResponse,
+    CancelJobParams, CreateProposalParams, DatasetInspectParams, GetJobParams, GetProposalParams,
+    JobResponse, ListJobsParams, ListJobsResponse, ListProposalsParams, ListProposalsResponse,
+    ProposalResponse, ProposePageParams, ProposeResourceParams, ProposeYamlParams, ReadParams,
+    ReadResponse, RelatedParams, RelatedResponse, ResourcePathParams, SearchParams, SearchResponse,
+    WorkspaceRefParams, MAX_CONTEXT_BYTES, MAX_HIT_LIMIT, MAX_READ_BYTES,
 };
 pub use cloud_relay::{spawn_cloud_relay, CloudRelayConfig};
+pub use config::{
+    default_embed_host_endpoint, default_run_dir, default_socket_path, is_named_pipe_endpoint,
+    DaemonConfig, DEFAULT_API_PORT, DEFAULT_IDLE_SHUTDOWN_TIMEOUT,
+};
 pub use embed_host::{
     resolve_embed_host_bin, ProviderIdentity, SemanticController, SemanticProviderMode,
     ENV_EMBED_HOST_BACKEND, ENV_EMBED_HOST_BIN, ENV_EMBED_HOST_SOCKET, ENV_SEMANTIC_FAKE,
