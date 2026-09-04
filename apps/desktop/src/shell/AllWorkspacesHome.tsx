@@ -1,15 +1,19 @@
 import { Button } from "@lattice/ui";
 import { FolderOpen, FolderPlus, DownloadSimple } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { useWorkspaceCatalogQuery, useWorkspaceSummaryQueries } from "../query";
+import { inBrowser } from "../demo";
+import { listAccountCloudWorkspaces, type AccountCloudWorkspace } from "../lib/encryptedBackup";
 import type { RecentWorkspace } from "../lib/profile";
+import { queryKeys, useCloudSessionQuery, useWorkspaceCatalogQuery, useWorkspaceSummaryQueries } from "../query";
 import {
   groupWorkspaceCatalog,
   visibleWorkspaceCatalogIds,
   workspaceCatalogStatusLabel,
   type WorkspaceCatalogRow,
 } from "../lib/workspaceCatalogGroups";
+import { cloudWorkspacesNotOnThisDevice } from "./emptyCloudRestore";
 
 function WorkspaceRow({
   row,
@@ -76,6 +80,34 @@ function WorkspaceSection({
   );
 }
 
+function CloudWorkspaceRow({
+  workspace,
+  busy,
+  onDownload,
+}: {
+  workspace: AccountCloudWorkspace;
+  busy: boolean;
+  onDownload: (cloudWorkspaceId: string) => void;
+}) {
+  return (
+    <div className="all-workspaces-row all-workspaces-row-static">
+      <span className="all-workspaces-row-main">
+        <strong>{workspace.name.trim() || workspace.id}</strong>
+        <code>Not on this device</code>
+      </span>
+      <span className="all-workspaces-row-meta">
+        <Button
+          variant="secondary"
+          onClick={() => onDownload(workspace.id)}
+          disabled={busy}
+        >
+          Download…
+        </Button>
+      </span>
+    </div>
+  );
+}
+
 export function AllWorkspacesHome({
   activeWorkspaceId,
   activeWorkspaceTitle,
@@ -86,6 +118,7 @@ export function AllWorkspacesHome({
   onCreate,
   onOpenFolder,
   onImport,
+  onDownloadCloudWorkspace,
 }: {
   activeWorkspaceId: string | null;
   activeWorkspaceTitle: string;
@@ -96,8 +129,16 @@ export function AllWorkspacesHome({
   onCreate: () => void;
   onOpenFolder: () => void;
   onImport: () => void;
+  onDownloadCloudWorkspace: (cloudWorkspaceId: string) => void;
 }) {
   const catalogQuery = useWorkspaceCatalogQuery();
+  const { data: cloudSession } = useCloudSessionQuery();
+  const signedIn = Boolean(cloudSession?.signedIn);
+  const cloudQuery = useQuery({
+    queryKey: queryKeys.accountCloudWorkspaces(),
+    queryFn: listAccountCloudWorkspaces,
+    enabled: signedIn && !inBrowser,
+  });
   const groupedMeta = useMemo(
     () =>
       groupWorkspaceCatalog({
@@ -118,6 +159,14 @@ export function AllWorkspacesHome({
         summaries,
       }),
     [catalogQuery.data, pinnedRoot, recents, summaries],
+  );
+  const localWorkspaceIds = useMemo(
+    () => new Set((catalogQuery.data?.workspaces ?? []).map((entry) => entry.workspaceId)),
+    [catalogQuery.data],
+  );
+  const missingCloudWorkspaces = useMemo(
+    () => cloudWorkspacesNotOnThisDevice(cloudQuery.data ?? [], localWorkspaceIds),
+    [cloudQuery.data, localWorkspaceIds],
   );
 
   const loading = catalogQuery.isLoading && !catalogQuery.data;
@@ -147,7 +196,7 @@ export function AllWorkspacesHome({
           </Button>
           <Button variant="ghost" onClick={onImport} disabled={busy}>
             <DownloadSimple size={14} />
-            Import…
+            Download…
           </Button>
         </div>
       </div>
@@ -184,6 +233,28 @@ export function AllWorkspacesHome({
           busy={busy}
           onOpen={onOpenById}
         />
+      ) : null}
+
+      {signedIn && missingCloudWorkspaces.length > 0 ? (
+        <section className="all-workspaces-section">
+          <h2>Cloud (not on this device)</h2>
+          <p className="all-workspaces-empty">
+            Download restores an encrypted backup into a folder on this computer, then opens it.
+          </p>
+          <div className="all-workspaces-list">
+            {missingCloudWorkspaces.map((workspace) => (
+              <CloudWorkspaceRow
+                key={workspace.id}
+                workspace={workspace}
+                busy={busy}
+                onDownload={onDownloadCloudWorkspace}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {signedIn && cloudQuery.isError ? (
+        <p className="error-text">Could not list cloud workspaces.</p>
       ) : null}
     </div>
   );

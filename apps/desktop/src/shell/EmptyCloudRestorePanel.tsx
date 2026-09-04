@@ -35,6 +35,8 @@ import {
 export interface EmptyCloudRestorePanelProps {
   panel: "sign-in" | "restore";
   shellBusy: boolean;
+  preferredCloudWorkspaceId?: string;
+  onClose?: () => void;
   onOpenRestoredWorkspace: (path: string) => Promise<void>;
 }
 
@@ -62,6 +64,8 @@ function phaseCopy(phase: EmptyCloudRestorePhase): string {
 export function EmptyCloudRestorePanel({
   panel,
   shellBusy,
+  preferredCloudWorkspaceId = "",
+  onClose,
   onOpenRestoredWorkspace,
 }: EmptyCloudRestorePanelProps) {
   const queryClient = useQueryClient();
@@ -144,7 +148,7 @@ export function EmptyCloudRestorePanel({
       setSelectedCloudWorkspaceId((prev) =>
         nextSelectedId(
           loaded.workspaces.map((workspace) => workspace.id),
-          prev,
+          preferredCloudWorkspaceId.trim() || prev,
         ),
       );
       setWorkspacesLoading(false);
@@ -152,7 +156,7 @@ export function EmptyCloudRestorePanel({
     return () => {
       cancelled = true;
     };
-  }, [signedIn]);
+  }, [signedIn, preferredCloudWorkspaceId]);
 
   useEffect(() => {
     if (inBrowser || !signedIn || !selectedCloudWorkspaceId) {
@@ -405,6 +409,16 @@ export function EmptyCloudRestorePanel({
             <span className="empty-restore-path">{restoreTarget ?? "Choose a folder"}</span>
           </label>
           <div className="empty-restore-actions">
+            {onClose ? (
+              <button
+                type="button"
+                className="secondary-button empty-restore-button"
+                disabled={restoreBusy}
+                onClick={onClose}
+              >
+                Cancel
+              </button>
+            ) : null}
             <button
               type="button"
               className="secondary-button empty-restore-button"

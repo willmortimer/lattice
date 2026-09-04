@@ -176,6 +176,22 @@ export function nextSelectedId(ids: readonly string[], previous: string): string
 }
 
 /**
+ * Cloud workspaces that are not already registered on this device.
+ * Matches by local workspace id when present, else the cloud workspace id.
+ */
+export function cloudWorkspacesNotOnThisDevice(
+  cloud: readonly AccountCloudWorkspace[],
+  localWorkspaceIds: ReadonlySet<string>,
+): AccountCloudWorkspace[] {
+  return cloud.filter((workspace) => {
+    const localId = workspace.localWorkspaceId?.trim() ?? "";
+    if (localId && localWorkspaceIds.has(localId)) return false;
+    if (localWorkspaceIds.has(workspace.id)) return false;
+    return true;
+  });
+}
+
+/**
  * Restore via cloud workspace id, then open the destination folder.
  * Does not create Personal or unlock a local DEK first.
  */

@@ -21,6 +21,7 @@ import {
   emptyCloudRestorePhase,
   loadEmptyRestoreBackups,
   loadEmptyRestoreWorkspaces,
+  cloudWorkspacesNotOnThisDevice,
   nextSelectedId,
   runEmptyShellRestore,
   supportsNativeAppleSignIn,
@@ -153,6 +154,27 @@ describe("emptyCloudRestore listing", () => {
     expect(nextSelectedId(["a", "b"], "b")).toBe("b");
     expect(nextSelectedId(["a", "b"], "gone")).toBe("a");
     expect(nextSelectedId([], "a")).toBe("");
+  });
+});
+
+describe("cloudWorkspacesNotOnThisDevice", () => {
+  it("keeps cloud rows whose local id is not in the device registry", () => {
+    const missing = cloudWorkspacesNotOnThisDevice(
+      [
+        { id: "cloud-first-look", name: "First Look", localWorkspaceId: "local-first", createdAt: 1 },
+        { id: "cloud-personal", name: "Personal", localWorkspaceId: "local-personal", createdAt: 2 },
+      ],
+      new Set(["local-personal"]),
+    );
+    expect(missing.map((workspace) => workspace.id)).toEqual(["cloud-first-look"]);
+  });
+
+  it("treats a matching cloud id as already on this device", () => {
+    const missing = cloudWorkspacesNotOnThisDevice(
+      [{ id: "ws-1", name: "Same", createdAt: 1 }],
+      new Set(["ws-1"]),
+    );
+    expect(missing).toEqual([]);
   });
 });
 

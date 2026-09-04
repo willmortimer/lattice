@@ -15,6 +15,7 @@
  * - ["agent-run-active", workspaceRoot, threadId]
  * - ["kernelfs-run", runId]
  * - ["cloud-session"]
+ * - ["account-cloud-workspaces"]
  * - ["voice-status", providerId]
  * - ["remote-access"]
  * - ["semantic-search", workspaceRoot]
@@ -48,6 +49,8 @@ export const queryKeys = {
   kernelfsRun: (runId: string) => ["kernelfs-run", runId] as const,
 
   cloudSession: () => ["cloud-session"] as const,
+
+  accountCloudWorkspaces: () => ["account-cloud-workspaces"] as const,
 
   voiceStatus: (providerId: string = DEFAULT_VOICE_PROVIDER_ID) =>
     ["voice-status", providerId] as const,

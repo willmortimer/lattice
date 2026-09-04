@@ -123,6 +123,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [browserActiveFolderPath, setBrowserActiveFolderPath] = useState<string | null>(null);
   const [emptyRestorePanel, setEmptyRestorePanel] = useState<"sign-in" | "restore" | null>(null);
+  const [restorePreferredCloudId, setRestorePreferredCloudId] = useState("");
   const {
     profile, profileReady, settings, startup, snapshot, catalog, catalogDelta, selected, selectedResourceIds, session, error, busy,
     externalConflict, reloadToken, newWorkspaceOpen, newWorkspacePrefill, workspacesDir, templates, statusToast,
@@ -859,10 +860,27 @@ export function DesktopShell({ model }: DesktopShellProps) {
                   onCreate={() => void openNewWorkspaceDialog()}
                   onOpenFolder={() => void handleOpenWorkspace()}
                   onImport={() => {
-                    setStatusToast("Workspace import is not available yet.");
+                    setRestorePreferredCloudId("");
+                    setEmptyRestorePanel("restore");
+                  }}
+                  onDownloadCloudWorkspace={(cloudWorkspaceId) => {
+                    setRestorePreferredCloudId(cloudWorkspaceId);
+                    setEmptyRestorePanel("restore");
                   }}
                 />
               )}
+              {activityArea === "home" && emptyRestorePanel ? (
+                <EmptyCloudRestorePanel
+                  panel={emptyRestorePanel}
+                  shellBusy={busy}
+                  preferredCloudWorkspaceId={restorePreferredCloudId}
+                  onClose={() => setEmptyRestorePanel(null)}
+                  onOpenRestoredWorkspace={async (path) => {
+                    setEmptyRestorePanel(null);
+                    await openRecent(path);
+                  }}
+                />
+              ) : null}
 
               {activityArea === "settings" && (
                 <Suspense fallback={<div className="surface-loading">Loading settings…</div>}>

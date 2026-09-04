@@ -6310,6 +6310,10 @@ html[data-motion="always"] *::after {
   cursor: default;
 }
 
+.all-workspaces-row-static {
+  cursor: default;
+}
+
 .all-workspaces-row-main {
   display: flex;
   min-width: 0;

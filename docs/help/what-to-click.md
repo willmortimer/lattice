@@ -27,9 +27,11 @@ open **Inspect** on that item or **Show agent** for help with the workspace.
   (requires **Settings → Cloud account**).
 - **Back up this workspace** — **Settings → Cloud account → Encrypted workspace
   backup → Back up workspace** (needs an open workspace).
-- **Restore on a new Mac** — empty Lattice: **Sign in to Lattice Cloud**, then
-  **Restore encrypted backup** (pick a cloud workspace, backup, and folder). You
-  do not need to create Personal first. See [Open a workspace](first-workspace.md).
+- **Restore on a new computer** — empty Lattice: **Sign in to Lattice Cloud**,
+  then **Restore encrypted backup** (pick a cloud workspace, backup, and
+  folder). You do not need to create Personal first. With a workspace already
+  open: **All Workspaces → Download…** for cloud workspaces not on this device.
+  See [Open a workspace](first-workspace.md).
 - **Restore with a workspace open** — **Settings → Cloud account → Encrypted
   workspace backup**, or Inspect for the open workspace.
 - **Shared page editing** — **Plain file** / **Collaborative** on pages with a

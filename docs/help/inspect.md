@@ -90,7 +90,7 @@ as **Back up to Lattice Cloud**. You need an open workspace to **back up**.
 1. Sign in under **Settings → Cloud account**.
 2. Under **Encrypted workspace backup**, click **Back up workspace**.
 
-**Restore on a new Mac** (empty Lattice, no workspace yet):
+**Restore on a new computer** (empty Lattice, no workspace yet):
 
 1. Click **Sign in to Lattice Cloud**, then **Restore encrypted backup**.
 2. Pick a cloud workspace, a backup, and a destination folder.
@@ -98,6 +98,16 @@ as **Back up to Lattice Cloud**. You need an open workspace to **back up**.
    If the browser shows **Opening Lattice…**, click **Open Lattice**.
 
 You do not need to create a Personal workspace first.
+
+**Download a cloud workspace that is not on this device** (already signed in,
+another workspace may be open):
+
+1. Open **All Workspaces**.
+2. Use **Download…**, or pick a row under **Cloud (not on this device)**.
+3. Choose a backup and a destination folder, then restore.
+
+The cloud workspace must already have an encrypted backup from a device that
+had it open.
 
 **Restore when a workspace is already open:**
 

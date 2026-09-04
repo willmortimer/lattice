@@ -25,7 +25,7 @@ If the folder is not a Lattice workspace yet, select it in Finder and choose
 this existing folder**. Opening a stray file that is not already in a workspace
 does not wrap its parent folder as a workspace.
 
-## Restore on a new Mac
+## Restore on a new computer
 
 If Lattice has no workspace yet, click **Sign in to Lattice Cloud**, then
 **Restore encrypted backup**. Pick a cloud workspace, a backup, and a
@@ -33,8 +33,14 @@ destination folder. After restore, that folder opens as the workspace. You do
 not need to create a Personal workspace first. If the browser shows **Opening
 Lattice…** and the app does not appear, click **Open Lattice**.
 
+If you are already signed in and another computer’s cloud workspace is **not**
+on this device, open **All Workspaces** and use **Download…** (or the **Cloud
+(not on this device)** list). That restores an encrypted backup into a folder
+here, then opens it — the same path as the empty-shell restore.
+
 To **back up**, open a workspace and use **Settings → Cloud account → Encrypted
-workspace backup**. See [Inspect](inspect.md).
+workspace backup**. See [Inspect](inspect.md). A workspace must have been backed
+up once before another device can download it.
 
 ## Quick check
 
