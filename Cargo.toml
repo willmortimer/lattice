@@ -126,8 +126,17 @@ ignore = "0.4"
 rusqlite = { version = "0.37", features = ["bundled"] }
 sha2 = "0.10"
 hex = "0.4"
-wasmtime = "27"
-wasmtime-wasi = "27"
+# Keep in lockstep with kernelfs. wasmtime-wasi requires `async` +
+# `component-model`; cranelift compiles WASI guests from binary. Default
+# gc/wat/cache/profiling/addr2line/coredump/threads are unused.
+wasmtime = { version = "27", default-features = false, features = [
+    "async",
+    "component-model",
+    "cranelift",
+    "runtime",
+    "std",
+] }
+wasmtime-wasi = { version = "27", default-features = false, features = ["preview1"] }
 # Apache Arrow / Parquet (Apache-2.0) for analytical dataset facts under `facts/`
 # and Arrow IPC transport to the desktop (ADR 0021).
 arrow = { version = "59.1", default-features = false, features = ["csv", "ipc"] }
